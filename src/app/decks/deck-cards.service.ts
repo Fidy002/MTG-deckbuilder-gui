@@ -49,6 +49,17 @@ export class DeckCardsService {
     );
   }
 
+  // Cards picked from a search result are already complete; no need to ask Scryfall again.
+  remember(entry: Pick<DeckEntry, 'name' | 'set' | 'collectorNumber'>, language: string, card: ScryfallCard): void {
+    if (card.lang !== language) {
+      return;
+    }
+    const key = `${language}|${cardKey(entry)}`;
+    const result = { card, localized: true };
+    this.cache.set(key, result);
+    void this.persistent.setMany([[CACHE_PREFIX + key, result]], CARD_TTL_MS);
+  }
+
   private fetch(missing: readonly DeckEntry[], language: string): Observable<unknown> {
     return this.find(missing, language).pipe(
       concatMap((found) => {

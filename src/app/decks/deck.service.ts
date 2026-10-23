@@ -91,6 +91,17 @@ export class DeckService {
     this.updateText(id, serializeDecklist(entries));
   }
 
+  setCount(id: string, entry: DeckEntry, count: number): void {
+    const deck = this.get(id);
+    if (!deck) {
+      return;
+    }
+    const entries = parseDecklist(deck.text)
+      .map((current) => (isSameCard(current, entry) ? { ...current, count } : current))
+      .filter((current) => current.count > 0);
+    this.updateText(id, serializeDecklist(entries));
+  }
+
   updateEntry(id: string, entry: DeckEntry, changes: EntryChanges): void {
     const deck = this.get(id);
     if (!deck) {

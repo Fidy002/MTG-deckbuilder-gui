@@ -33,6 +33,7 @@ const TYPE_PRIORITY: readonly CardType[] = [
 ];
 
 interface OverviewCard {
+  key: string;
   entry: DeckEntry;
   name: string;
   image?: string;
@@ -51,7 +52,7 @@ interface OverviewGroup {
 type ResolveState =
   | { status: 'loading' }
   | { status: 'error' }
-  | { status: 'done'; cards: Map<string, ResolvedCard | null>; language: string };
+  | { status: 'done'; cards: Map<string, ResolvedCard | null>; language: string; deckId: string };
 
 @Component({
   selector: 'app-deck-overview',
@@ -89,9 +90,9 @@ export class DeckOverview {
         this.lastRequestedDeck = deckId;
         return timer(sameDeck ? 400 : 0);
       }),
-      switchMap(({ entries, language }) =>
+      switchMap(({ entries, language, deckId }) =>
         this.deckCards.resolve(entries, language).pipe(
-          map((cards): ResolveState => ({ status: 'done', cards, language })),
+          map((cards): ResolveState => ({ status: 'done', cards, language, deckId })),
           startWith<ResolveState>({ status: 'loading' }),
           catchError(() => of<ResolveState>({ status: 'error' })),
         ),
@@ -100,7 +101,10 @@ export class DeckOverview {
     { initialValue: { status: 'loading' } as ResolveState },
   );
 
-  private readonly lastResult = linkedSignal<ResolveState, { cards: Map<string, ResolvedCard | null>; language?: string }>({
+  private readonly lastResult = linkedSignal<
+    ResolveState,
+    { cards: Map<string, ResolvedCard | null>; language?: string; deckId?: string }
+  >({
     source: this.state,
     computation: (state, previous) =>
       state.status === 'done' ? state : (previous?.value ?? { cards: new Map() }),
@@ -112,8 +116,9 @@ export class DeckOverview {
     if (this.state().status === 'error') {
       return false;
     }
-    const { cards, language } = this.lastResult();
-    return language !== this.language() || this.entries().some((e) => !cards.has(cardKey(e)));
+    // Only a deck or language switch blocks the view; cards added to the open deck appear as soon as they resolve.
+    const { language, deckId } = this.lastResult();
+    return language !== this.language() || deckId !== this.deckId();
   });
 
   protected readonly groups = computed(() => {
@@ -121,6 +126,7 @@ export class DeckOverview {
     const cards = this.entries().map((entry): OverviewCard => {
       const result = resolved.get(cardKey(entry));
       return {
+        key: cardKey(entry),
         entry,
         resolved: result,
         name: result ? cardDisplayName(result.card) : entry.name,
@@ -228,6 +234,12 @@ export class DeckOverview {
   protected open(card: OverviewCard): void {
     this.hoverOverlay.hide();
     this.selected.set(card);
+  }
+
+  protected changeCount(card: OverviewCard, delta: number): void {
+    const count = card.entry.count + delta;
+    this.deckService.setCount(this.deckId(), card.entry, Math.max(count, 0));
+    this.selected.set(count > 0 ? { ...card, entry: { ...card.entry, count } } : undefined);
   }
 
   private updateSelected(card: OverviewCard, changes: EntryChanges): void {

@@ -1,15 +1,20 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe } from '../i18n/translate.pipe';
 import { ScryfallCard, cardDisplayName, cardFaces } from '../scryfall/scryfall.models';
-import { CardHover } from '../shared/card-hover/card-hover';
+import { CardHalf, CardHover } from '../shared/card-hover/card-hover';
 import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.service';
 
 @Component({
   selector: 'app-card-tile',
   imports: [TranslatePipe, CardHover],
   template: `
-    <button type="button" [attr.aria-label]="name()" (click)="select()">
-      <app-card-hover [name]="name()" [previewImage]="largeImage()">
+    <button type="button" class="tile" [attr.aria-label]="name()" (click)="activate($event)">
+      <app-card-hover
+        [name]="name()"
+        [previewImage]="largeImage()"
+        [splitHalves]="addable()"
+        (halfChange)="half.set($event)"
+      >
         @if (image(); as src) {
           <img [src]="src" [alt]="name()" loading="lazy" width="488" height="680" />
         } @else {
@@ -18,15 +23,25 @@ import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.servic
             <small>{{ 'card.noImage' | t }}</small>
           </span>
         }
+        @if (addable()) {
+          <span class="add-zone" [class.active]="half() === 'lower'" aria-hidden="true">
+            <span class="add-label">{{ 'card.addCard' | t }}</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
+          </span>
+        }
       </app-card-hover>
     </button>
+    @if (addable()) {
+      <button type="button" class="visually-hidden" (click)="addToDeck()">{{ 'card.addToDeck' | t }}</button>
+    }
   `,
   styles: `
     :host {
+      position: relative;
       display: block;
       filter: var(--shadow-stack);
     }
-    button {
+    .tile {
       display: block;
       width: 100%;
       height: auto;
@@ -36,7 +51,7 @@ import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.servic
       white-space: normal;
       pointer-events: none;
     }
-    button:focus-visible {
+    .tile:focus-visible {
       outline: none;
     }
     img {
@@ -50,20 +65,80 @@ import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.servic
     .card-placeholder {
       border-radius: inherit;
     }
+
+    // Lower half of the card: white gradient from the bottom edge up to the middle of the card.
+    // The vertical corner radius is doubled because this element is only half as tall as the card.
+    .add-zone {
+      position: absolute;
+      inset: auto 0 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--space-1);
+      height: 50%;
+      padding-bottom: var(--space-3);
+      border-radius: 0 0 4.5% 4.5% / 0 0 6.5% 6.5%;
+      background: linear-gradient(to top, var(--color-highlight), transparent);
+      color: var(--color-bg);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--transition-fast);
+
+      .icon {
+        width: 22px;
+        height: 22px;
+        stroke-width: 2.4;
+      }
+
+      &.active {
+        opacity: 1;
+      }
+    }
+    .add-label {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      opacity: 0;
+      transform: translateY(6px) scale(0.9);
+      transition:
+        opacity var(--transition-fast),
+        transform var(--transition-fast);
+    }
+    .add-zone.active .add-label {
+      opacity: 1;
+      transform: none;
+    }
+    :host(:hover) .add-zone:not(.active) {
+      opacity: var(--add-zone-dim-opacity);
+    }
   `,
 })
 export class CardTile {
   private readonly hoverOverlay = inject(CardHoverOverlay);
 
   readonly card = input.required<ScryfallCard>();
+  readonly addable = input(false);
   readonly selected = output<ScryfallCard>();
+  readonly add = output<ScryfallCard>();
 
+  protected readonly half = signal<CardHalf | undefined>(undefined);
   protected readonly name = computed(() => cardDisplayName(this.card()));
   protected readonly image = computed(() => cardFaces(this.card())[0]?.image?.normal);
   protected readonly largeImage = computed(() => cardFaces(this.card())[0]?.image?.large);
 
-  protected select(): void {
-    this.hoverOverlay.hide();
-    this.selected.emit(this.card());
+  // Decided by the click position itself, so it never depends on a hover state that might lag behind.
+  protected activate(event: MouseEvent): void {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const onLowerHalf = event.detail > 0 && event.clientY > rect.top + rect.height / 2;
+    if (this.addable() && onLowerHalf) {
+      this.addToDeck();
+    } else {
+      this.hoverOverlay.hide();
+      this.selected.emit(this.card());
+    }
+  }
+
+  protected addToDeck(): void {
+    this.add.emit(this.card());
   }
 }

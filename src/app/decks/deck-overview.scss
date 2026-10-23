@@ -49,6 +49,17 @@ h3 {
     font-weight: 400;
     color: var(--color-text-muted);
   }
+
+  &.mana-heading {
+    position: relative;
+    justify-content: center;
+
+    .count {
+      position: absolute;
+      right: 0;
+      bottom: var(--space-1);
+    }
+  }
 }
 
 .stack {
@@ -129,6 +140,38 @@ h3 {
   gap: var(--space-2);
   padding-top: var(--space-4);
   border-top: var(--line-width) solid var(--color-line);
+}
+
+.count-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+
+  button {
+    width: var(--control-height);
+    padding: 0;
+  }
+
+  .stepper-value {
+    min-width: 2.5rem;
+    text-align: center;
+    font-weight: 600;
+  }
+}
+
+.remove {
+  border-color: transparent;
+  color: var(--color-text-muted);
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
 }
 
 .category-field {

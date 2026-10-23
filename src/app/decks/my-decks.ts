@@ -1,25 +1,42 @@
-import { Component, ElementRef, computed, inject, input, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
-import { I18nService, TranslationKey } from '../i18n/i18n.service';
+import { CardSearch } from '../cards/card-search';
+import { I18nService, TranslationKey, TranslationParams } from '../i18n/i18n.service';
 import { TranslatePipe } from '../i18n/translate.pipe';
-import { cardLanguageName } from '../scryfall/card-languages';
-import { manaSymbolUrl } from '../scryfall/scryfall.models';
+import { CARD_LANGUAGES, cardLanguageName } from '../scryfall/card-languages';
+import { ScryfallCard, cardDisplayName, deckCardName, manaSymbolUrl } from '../scryfall/scryfall.models';
+import { Flag } from '../settings/flag';
 import { LanguageOption, LanguageSelect } from '../settings/language-select';
 import { cardLanguageOptions } from '../settings/language-settings';
 import { DeckSort, SettingsService } from '../settings/settings.service';
 import { DECK_EXPORT_FORMATS, DeckExportFormat } from './deck-formats';
 import { DeckOverview } from './deck-overview';
+import { DeckCardsService, cardKey } from './deck-cards.service';
 import { DeckService, countCards } from './deck.service';
 import { countEntries, parseDecklist } from './decklist';
 import { ImportDialog } from './import-dialog';
 
 type View = 'overview' | 'text';
 
+interface Toast {
+  key: TranslationKey;
+  params?: TranslationParams;
+  error?: boolean;
+}
+
 const AUTO_LANGUAGE = 'auto';
+const FLASH_TIMEOUT_MS = 4000;
+
+const CARD_FLASH: Keyframe[] = [
+  { transform: 'scale(1.06)', filter: 'brightness(1.35) drop-shadow(0 0 14px var(--color-highlight))', offset: 0.3 },
+];
+const COUNT_FLASH: Keyframe[] = [
+  { color: 'var(--color-highlight)', textShadow: '0 0 8px var(--color-highlight)', transform: 'scale(1.15)', offset: 0.3 },
+];
 
 @Component({
   selector: 'app-my-decks',
-  imports: [TranslatePipe, RouterLink, RouterLinkActive, DeckOverview, ImportDialog, LanguageSelect],
+  imports: [TranslatePipe, RouterLink, RouterLinkActive, DeckOverview, ImportDialog, LanguageSelect, Flag, CardSearch],
   host: {
     '(document:click)': 'onDocumentClick($event)',
   },
@@ -28,6 +45,7 @@ const AUTO_LANGUAGE = 'auto';
 })
 export class MyDecks {
   private readonly deckService = inject(DeckService);
+  private readonly deckCards = inject(DeckCardsService);
   private readonly i18n = inject(I18nService);
   private readonly settings = inject(SettingsService);
   private readonly router = inject(Router);
@@ -46,15 +64,25 @@ export class MyDecks {
   protected readonly exportFormats = DECK_EXPORT_FORMATS;
   protected readonly exportMenuOpen = signal(false);
   protected readonly importMode = signal<'new' | 'replace' | undefined>(undefined);
-  protected readonly toast = signal<{ key: TranslationKey; format?: string; error?: boolean } | undefined>(undefined);
+  protected readonly toast = signal<Toast | undefined>(undefined);
+  protected readonly addCardsOpen = signal(false);
+  protected readonly addCardsUsed = signal(false);
   private toastTimer?: ReturnType<typeof setTimeout>;
 
-  protected readonly decks = computed(() =>
-    this.deckService.decks().map((deck) => {
+  protected readonly decks = computed(() => {
+    const globalLanguage = this.settings.cardLanguage();
+    return this.deckService.decks().map((deck) => {
       const cardCount = countCards(deck.text);
-      return { ...deck, cardCount, colorSymbols: colorSymbols(deck.colors, cardCount) };
-    }),
-  );
+      const language = CARD_LANGUAGES.find((l) => l.scryfallCode === (deck.language ?? globalLanguage));
+      return { ...deck, cardCount, colorSymbols: colorSymbols(deck.colors, cardCount), languageFlag: language?.flag };
+    });
+  });
+
+  // Flags only carry information when at least one deck differs from the global card language.
+  protected readonly showDeckFlags = computed(() => {
+    const globalLanguage = this.settings.cardLanguage();
+    return this.deckService.decks().some((deck) => deck.language && deck.language !== globalLanguage);
+  });
 
   protected readonly deck = computed(() => this.decks().find((deck) => deck.id === this.id()));
 
@@ -80,6 +108,44 @@ export class MyDecks {
         )
       : '';
   });
+
+  constructor() {
+    effect(() => {
+      const first = this.deckService.decks()[0];
+      if (!this.id() && first) {
+        this.router.navigate(['/decks', first.id], { replaceUrl: true });
+      }
+    });
+  }
+
+  protected toggleAddCards(): void {
+    this.addCardsOpen.update((open) => !open);
+    this.addCardsUsed.set(true);
+  }
+
+  protected addCard(deckId: string, card: ScryfallCard): void {
+    const entry = { name: deckCardName(card), set: card.set, collectorNumber: card.collector_number };
+    this.deckCards.remember(entry, this.deckLanguage(), card);
+    this.deckService.addCard(deckId, entry);
+    this.showToast({ key: 'decks.cardAdded', params: { card: cardDisplayName(card) } });
+    this.flash(`[data-deck-count="${deckId}"]`, COUNT_FLASH);
+    this.flash(`[data-card-key="${CSS.escape(cardKey(entry))}"]`, CARD_FLASH);
+  }
+
+  // Waits until the element exists and its card has loaded, then plays a short highlight animation.
+  private flash(selector: string, keyframes: Keyframe[]): void {
+    const started = Date.now();
+    const duration = parseFloat(getComputedStyle(this.host.nativeElement).getPropertyValue('--added-flash-duration')) || 700;
+    const attempt = () => {
+      const element = this.host.nativeElement.querySelector<HTMLElement>(selector);
+      if (element && !(element as HTMLButtonElement).disabled) {
+        element.animate(keyframes, { duration, easing: 'ease-out' });
+      } else if (Date.now() - started < FLASH_TIMEOUT_MS) {
+        setTimeout(attempt, 100);
+      }
+    };
+    setTimeout(attempt, 50);
+  }
 
   protected create(): void {
     const deck = this.deckService.create(this.i18n.translate('decks.defaultName'));
@@ -130,7 +196,7 @@ export class MyDecks {
     this.exportMenuOpen.set(false);
     try {
       await navigator.clipboard.writeText(format.export(this.entries()));
-      this.showToast({ key: 'export.copied', format: format.label });
+      this.showToast({ key: 'export.copied', params: { format: format.label } });
     } catch {
       this.showToast({ key: 'export.failed', error: true });
     }
@@ -143,7 +209,7 @@ export class MyDecks {
     }
   }
 
-  private showToast(toast: { key: TranslationKey; format?: string; error?: boolean }): void {
+  private showToast(toast: Toast): void {
     clearTimeout(this.toastTimer);
     this.toast.set(toast);
     this.toastTimer = setTimeout(() => this.toast.set(undefined), 3000);

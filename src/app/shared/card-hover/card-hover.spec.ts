@@ -36,6 +36,41 @@ describe('CardHover', () => {
     expect(overlay.preview()).toBeUndefined();
   });
 
+  it('reports which half of the card the pointer is over', () => {
+    const { fixture, hitArea } = render();
+    const host = fixture.nativeElement as HTMLElement;
+    host.getBoundingClientRect = () => ({ top: 0, height: 200, left: 0, width: 100, right: 100, bottom: 200 }) as DOMRect;
+    const halves: unknown[] = [];
+    fixture.componentInstance.halfChange.subscribe((half) => halves.push(half));
+
+    hitArea.dispatchEvent(new MouseEvent('mouseenter', { clientY: 50 }));
+    hitArea.dispatchEvent(new MouseEvent('mousemove', { clientY: 150 }));
+    fixture.detectChanges();
+    expect(host.classList).toContain('lower');
+    hitArea.dispatchEvent(new MouseEvent('mouseleave'));
+
+    expect(halves).toEqual(['upper', 'lower', undefined]);
+  });
+
+  it('in split mode shows the preview only over the upper half', () => {
+    const { fixture, hitArea, overlay } = render();
+    fixture.componentRef.setInput('splitHalves', true);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    host.getBoundingClientRect = () => ({ top: 0, height: 200, left: 0, width: 100, right: 100, bottom: 200 }) as DOMRect;
+
+    hitArea.dispatchEvent(new MouseEvent('mouseenter', { clientY: 150 }));
+    vi.advanceTimersByTime(600);
+    expect(overlay.preview()).toBeUndefined();
+
+    hitArea.dispatchEvent(new MouseEvent('mousemove', { clientY: 50 }));
+    vi.advanceTimersByTime(500);
+    expect(overlay.preview()).toBeDefined();
+
+    hitArea.dispatchEvent(new MouseEvent('mousemove', { clientY: 150 }));
+    expect(overlay.preview()).toBeUndefined();
+  });
+
   it('does nothing while disabled', () => {
     const { hitArea, overlay } = render(true);
     hitArea.dispatchEvent(new MouseEvent('mouseenter'));

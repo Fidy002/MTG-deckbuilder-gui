@@ -45,6 +45,11 @@ export class CardHoverOverlay {
     this.hide();
     this.trackPointer(event);
     this.spawnEmbers(hitArea.getBoundingClientRect());
+    this.schedulePreview(card, previewImage, name);
+  }
+
+  schedulePreview(card: HTMLElement, previewImage: string | undefined, name: string): void {
+    this.hide();
     if (!previewImage) {
       return;
     }

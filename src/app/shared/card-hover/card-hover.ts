@@ -1,12 +1,18 @@
-import { Component, DestroyRef, ElementRef, inject, input, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, inject, input, output, signal } from '@angular/core';
 import { CardHoverOverlay } from './card-hover-overlay.service';
 
 // Hover effect for card images. `hitHeight` limits the reactive area, e.g. to the visible strip of a stacked card.
+// With `splitHalves` the lower half is an action area: the glow is only fully bright there,
+// and the large preview only opens while the pointer is over the upper half.
+
+export type CardHalf = 'upper' | 'lower';
 @Component({
   selector: 'app-card-hover',
   host: {
     '[class.hovered]': 'hovered()',
     '[class.disabled]': 'disabled()',
+    '[class.split]': 'splitHalves()',
+    '[class.lower]': "half() === 'lower'",
   },
   template: `
     <ng-content />
@@ -15,7 +21,7 @@ import { CardHoverOverlay } from './card-hover-overlay.service';
       aria-hidden="true"
       [style.height]="hitHeight()"
       (mouseenter)="enter($event)"
-      (mousemove)="overlay.trackPointer($event)"
+      (mousemove)="move($event)"
       (mouseleave)="leave()"
     ></span>
   `,
@@ -35,6 +41,9 @@ import { CardHoverOverlay } from './card-hover-overlay.service';
       z-index: -1;
       border-radius: inherit;
       pointer-events: none;
+      transition:
+        opacity var(--transition-fast),
+        inset var(--transition-fast);
     }
 
     // The hit area moves against the hop, so the pointer never slips off the card mid-animation.
@@ -56,6 +65,13 @@ import { CardHoverOverlay } from './card-hover-overlay.service';
       @media (prefers-reduced-motion: reduce) {
         filter: url('#hover-water-still');
       }
+    }
+
+    // Upper half in split mode: small, faint glow; the full glow pops in once the pointer reaches the lower half.
+    :host(.split.hovered:not(.lower))::after {
+      inset: calc(-1 * var(--highlight-offset-dim));
+      opacity: var(--glow-dim-opacity);
+      animation: none;
     }
 
     .hit-area {
@@ -100,10 +116,13 @@ export class CardHover {
   readonly previewImage = input<string>();
   readonly hitHeight = input('100%');
   readonly disabled = input(false);
+  readonly splitHalves = input(false);
+  readonly halfChange = output<CardHalf | undefined>();
 
   protected readonly overlay = inject(CardHoverOverlay);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   protected readonly hovered = signal(false);
+  protected readonly half = signal<CardHalf | undefined>(undefined);
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.hovered() && this.overlay.hide());
@@ -114,11 +133,41 @@ export class CardHover {
       return;
     }
     this.hovered.set(true);
-    this.overlay.enter(this.host.nativeElement, event.target as HTMLElement, event, this.previewImage(), this.name());
+    this.setHalf(event);
+    this.overlay.enter(this.host.nativeElement, event.target as HTMLElement, event, this.previewFor(this.half()), this.name());
+  }
+
+  protected move(event: MouseEvent): void {
+    this.overlay.trackPointer(event);
+    if (this.hovered()) {
+      this.setHalf(event);
+    }
   }
 
   protected leave(): void {
     this.hovered.set(false);
     this.overlay.hide();
+    this.updateHalf(undefined);
+  }
+
+  private setHalf(event: MouseEvent): void {
+    const rect = this.host.nativeElement.getBoundingClientRect();
+    this.updateHalf(event.clientY > rect.top + rect.height / 2 ? 'lower' : 'upper');
+  }
+
+  private updateHalf(half: CardHalf | undefined): void {
+    if (half === this.half()) {
+      return;
+    }
+    const wasHovered = this.half() !== undefined;
+    this.half.set(half);
+    this.halfChange.emit(half);
+    if (this.splitHalves() && wasHovered && half) {
+      this.overlay.schedulePreview(this.host.nativeElement, this.previewFor(half), this.name());
+    }
+  }
+
+  private previewFor(half: CardHalf | undefined): string | undefined {
+    return this.splitHalves() && half === 'lower' ? undefined : this.previewImage();
   }
 }

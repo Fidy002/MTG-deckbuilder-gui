@@ -14,6 +14,7 @@
   --color-line-strong: rgb(184 150 79 / 0.4);
   --color-danger: #c27b66;
   --color-highlight: #f3ede2;
+  --color-flag-frame: #000;
   --color-overlay: rgb(8 7 6 / 0.82);
   --color-counter-fill: rgb(15 13 11 / 0.88);
 
@@ -48,7 +49,14 @@
 
   --card-ratio: 488 / 680;
   --card-ratio-large: 672 / 936;
+  --page-max-width: calc(100vh * 21 / 9);
   --stack-width: 180px;
+  --stack-card-height: calc(var(--stack-width) * 680 / 488);
+  --accordion-duration: 220ms;
+  --add-zone-dim-opacity: 0.4;
+  --glow-dim-opacity: 0.3;
+  --highlight-offset-dim: 0.8%;
+  --added-flash-duration: 700ms;
   --shadow-stack: drop-shadow(0 16px 18px rgb(0 0 0 / 0.65)) drop-shadow(0 4px 6px rgb(0 0 0 / 0.5));
   --shadow-card-edge: 0 -1px 3px rgb(0 0 0 / 0.55);
   --transition-fast: 140ms ease;

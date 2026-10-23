@@ -76,6 +76,10 @@ aside {
     font-weight: 600;
   }
 
+  .card-count {
+    transform-origin: left center;
+  }
+
   small {
     font-size: var(--text-xs);
     color: var(--color-text-faint);
@@ -198,6 +202,58 @@ aside {
 
   &.error .icon {
     color: var(--color-danger);
+  }
+}
+
+.add-cards {
+  .add-cards-toggle {
+    justify-content: flex-start;
+    width: 100%;
+    border: none;
+    color: var(--color-text);
+
+    .chevron {
+      margin-left: auto;
+      color: var(--color-accent);
+      transition: transform var(--accordion-duration) ease;
+    }
+  }
+
+  &.open .chevron {
+    transform: rotate(180deg);
+  }
+}
+
+// Accordion: animating the grid row from 0fr to 1fr opens the panel to its natural height.
+.add-cards-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--accordion-duration) ease;
+
+  .open & {
+    grid-template-rows: 1fr;
+  }
+}
+
+.add-cards-inner {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+
+  app-card-search {
+    padding: var(--space-2) var(--space-4) var(--space-4);
+  }
+
+  // Once open, let dropdowns and the hover glow reach outside the panel.
+  .open & {
+    animation: reveal-overflow 0s var(--accordion-duration) forwards;
+  }
+}
+
+@keyframes reveal-overflow {
+  to {
+    overflow: visible;
   }
 }
 

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Observable, catchError, combineLatest, debounceTime, distinctUntilChanged, map, of, startWith, switchMap } from 'rxjs';
 import { I18nService } from '../i18n/i18n.service';
@@ -13,6 +13,8 @@ import { SetSelect } from './set-select';
 
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 350;
+const LOAD_MORE_THRESHOLD_PX = 600;
+const GHOST_SLOTS = 10;
 
 type SearchState =
   | { status: 'idle' }
@@ -23,6 +25,7 @@ type SearchState =
 @Component({
   selector: 'app-card-search',
   imports: [TranslatePipe, CardTile, CardPreview, SetSelect],
+  host: { '[class.compact]': 'compact()' },
   templateUrl: './card-search.html',
   styleUrl: './card-search.scss',
 })
@@ -31,7 +34,14 @@ export class CardSearch {
   private readonly settings = inject(SettingsService);
   private readonly i18n = inject(I18nService);
 
+  readonly compact = input(false);
+  readonly language = input<string>();
+  readonly picked = output<ScryfallCard>();
+
+  private readonly searchLanguage = computed(() => this.language() ?? this.settings.cardLanguage());
+
   protected readonly minQueryLength = MIN_QUERY_LENGTH;
+  protected readonly ghostSlots = Array.from({ length: GHOST_SLOTS }, (_, i) => i);
   protected readonly query = signal('');
   protected readonly selectedSets = signal<string[]>([]);
   protected readonly state = signal<SearchState>({ status: 'idle' });
@@ -45,7 +55,7 @@ export class CardSearch {
 
   protected readonly fallbackLanguage = computed(() => {
     const result = this.result();
-    return result?.isFallback ? cardLanguageName(this.settings.cardLanguage(), this.i18n.language()) : undefined;
+    return result?.isFallback ? cardLanguageName(this.searchLanguage(), this.i18n.language()) : undefined;
   });
 
   constructor() {
@@ -55,12 +65,31 @@ export class CardSearch {
       distinctUntilChanged(),
     );
 
-    combineLatest([query$, toObservable(this.selectedSets), toObservable(this.settings.cardLanguage)])
+    combineLatest([query$, toObservable(this.selectedSets), toObservable(this.searchLanguage)])
       .pipe(
         switchMap(([query, sets, language]) => this.search(query, sets, language)),
         takeUntilDestroyed(),
       )
       .subscribe((state) => this.state.set(state));
+  }
+
+  // In the compact single row the mouse wheel scrolls sideways; the page only scrolls once the row is at its end.
+  protected onRowWheel(event: WheelEvent, row: HTMLElement): void {
+    if (!this.compact() || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+      return;
+    }
+    const atStart = row.scrollLeft <= 0 && event.deltaY < 0;
+    const atEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 1 && event.deltaY > 0;
+    if (!atStart && !atEnd) {
+      event.preventDefault();
+      row.scrollLeft += event.deltaY;
+    }
+  }
+
+  protected onRowScroll(row: HTMLElement): void {
+    if (this.compact() && row.scrollLeft + row.clientWidth >= row.scrollWidth - LOAD_MORE_THRESHOLD_PX) {
+      this.loadMore();
+    }
   }
 
   protected onInput(event: Event): void {

@@ -53,4 +53,13 @@ describe('DeckCardsService', () => {
     service.resolve([bolt, mountain], 'de').subscribe();
     await new Promise((resolve) => setTimeout(resolve));
   });
+
+  it('uses cards remembered from a search without asking Scryfall', async () => {
+    const shock: DeckEntry = { count: 1, name: 'Shock', set: 'm19', collectorNumber: '156', section: 'main' };
+    service.remember(shock, 'de', card('Shock', 'de', 'm19', '156') as never);
+    let result: Map<string, ResolvedCard | null> | undefined;
+    service.resolve([shock], 'de').subscribe((r) => (result = r));
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(result?.get(cardKey(shock))).toMatchObject({ localized: true, card: { name: 'Shock' } });
+  });
 });

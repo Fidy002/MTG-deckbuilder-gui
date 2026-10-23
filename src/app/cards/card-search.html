@@ -15,7 +15,9 @@
 <div class="messages">
   @switch (state().status) {
     @case ('idle') {
-      <p class="status">{{ 'search.hint' | t: { min: minQueryLength } }}</p>
+      @if (!compact()) {
+        <p class="status">{{ 'search.hint' | t: { min: minQueryLength } }}</p>
+      }
     }
     @case ('loading') {
       <p class="status">{{ 'search.loading' | t }}</p>
@@ -40,21 +42,31 @@
   }
 </div>
 
-@if (result(); as result) {
-  @if (result.cards.length) {
-    <div class="grid">
-      @for (card of result.cards; track card.id) {
-        <app-card-tile [card]="card" (selected)="selectedCard.set($event)" />
+<div class="results">
+  @if (compact() && !result()?.cards?.length) {
+    <div class="ghost-row" aria-hidden="true">
+      @for (slot of ghostSlots; track slot) {
+        <span class="ghost-card"></span>
       }
+      <span class="ghost-hint caps-label">{{ 'search.compactHint' | t }}</span>
     </div>
+  }
+  @if (result(); as result) {
+    @if (result.cards.length) {
+      <div class="grid" #row (wheel)="onRowWheel($event, row)" (scroll)="onRowScroll(row)">
+        @for (card of result.cards; track card.id) {
+          <app-card-tile [card]="card" [addable]="compact()" (selected)="selectedCard.set($event)" (add)="picked.emit($event)" />
+        }
+      </div>
 
-    @if (result.nextPage) {
-      <button type="button" class="load-more" (click)="loadMore()" [disabled]="loadingMore()">
-        {{ (loadingMore() ? 'search.loading' : 'search.loadMore') | t }}
-      </button>
+      @if (result.nextPage && !compact()) {
+        <button type="button" class="load-more" (click)="loadMore()" [disabled]="loadingMore()">
+          {{ (loadingMore() ? 'search.loading' : 'search.loadMore') | t }}
+        </button>
+      }
     }
   }
-}
+</div>
 
 @if (selectedCard(); as card) {
   <app-card-preview [card]="card" (closed)="selectedCard.set(undefined)" />

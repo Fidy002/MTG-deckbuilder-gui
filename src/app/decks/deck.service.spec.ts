@@ -60,6 +60,16 @@ describe('DeckService', () => {
     expect(service.get(deck.id)?.text).toBe('Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Sol Ring');
   });
 
+  it('changes the number of copies and removes a card at 0', () => {
+    const deck = service.create('Burn');
+    service.updateText(deck.id, '4 Lightning Bolt\n20 Mountain');
+    const bolt = { count: 4, name: 'Lightning Bolt', section: 'main' as const };
+    service.setCount(deck.id, bolt, 2);
+    expect(service.get(deck.id)?.text).toBe('2 Lightning Bolt\n20 Mountain');
+    service.setCount(deck.id, bolt, 0);
+    expect(service.get(deck.id)?.text).toBe('20 Mountain');
+  });
+
   it('counts played cards, without sideboard', () => {
     expect(countCards('4 Lightning Bolt\n2x Shock\n20 Mountain\n\nSideboard\n3 Duress')).toBe(26);
   });

@@ -8,7 +8,7 @@ header {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--space-4) var(--space-7);
-  max-width: 1440px;
+  max-width: var(--page-max-width);
   margin: 0 auto;
   padding: var(--space-5) var(--space-5) 0;
   border-bottom: var(--line-width) solid var(--color-line);
@@ -46,7 +46,7 @@ app-language-settings {
 }
 
 main {
-  max-width: 1440px;
+  max-width: var(--page-max-width);
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-7);
 }

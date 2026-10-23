@@ -35,6 +35,72 @@
   gap: var(--space-6) var(--space-5);
 }
 
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
 .load-more {
   align-self: center;
+}
+
+:host(.compact) {
+  gap: var(--space-4);
+  min-width: 0;
+
+  // Always reserve the height of one card row, so the accordion doesn't jump when results arrive.
+  .results {
+    min-height: calc(var(--stack-card-height) + var(--space-4));
+  }
+
+  .messages {
+    min-height: calc(var(--text-sm) * 1.5);
+  }
+
+  // Empty card slots where the results will land; the row's own padding is matched so cards appear in the same spot.
+  .ghost-row {
+    position: relative;
+    display: flex;
+    gap: var(--space-4);
+    padding-left: calc(var(--space-5) - var(--space-4));
+    overflow: hidden;
+    mask-image: linear-gradient(to right, black 40%, transparent);
+  }
+
+  .ghost-card {
+    flex: 0 0 var(--stack-width);
+    aspect-ratio: var(--card-ratio);
+    border: var(--line-width) dashed var(--color-line-strong);
+    border-radius: var(--radius-card);
+    background: var(--color-surface-sunken);
+  }
+
+  .ghost-hint {
+    position: absolute;
+    top: 50%;
+    left: calc(var(--space-5) - var(--space-4) + var(--stack-width) / 2);
+    transform: translate(-50%, -50%);
+    width: var(--stack-width);
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  // One horizontal row; the vertical padding leaves room for the hover glow and hop.
+  .grid {
+    display: flex;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5) var(--space-6);
+    margin: calc(-1 * var(--space-4));
+    scroll-padding-inline: var(--space-5);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-color: var(--color-line-strong) transparent;
+
+    app-card-tile {
+      flex: 0 0 var(--stack-width);
+      scroll-snap-align: start;
+    }
+  }
 }

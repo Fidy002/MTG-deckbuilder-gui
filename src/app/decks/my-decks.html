@@ -10,6 +10,9 @@
         <li>
           <a [routerLink]="['/decks', item.id]" routerLinkActive="active">
             <span class="name-row">
+              @if (showDeckFlags() && item.languageFlag; as flag) {
+                <app-flag [code]="flag" />
+              }
               <span class="name">{{ item.name.trim() || ('decks.untitled' | t) }}</span>
               @if (item.colorSymbols; as symbols) {
                 <span class="list-colors" [attr.aria-label]="'decks.colors' | t">
@@ -19,7 +22,7 @@
                 </span>
               }
             </span>
-            <small>{{ 'decks.cardCount' | t: { count: item.cardCount } }}</small>
+            <small class="card-count" [attr.data-deck-count]="item.id">{{ 'decks.cardCount' | t: { count: item.cardCount } }}</small>
           </a>
         </li>
       }
@@ -113,9 +116,24 @@
         } @else {
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
         }
-        {{ toast.key | t: { format: toast.format ?? '' } }}
+        {{ toast.key | t: toast.params }}
       </p>
     }
+
+    <section class="add-cards panel" [class.open]="addCardsOpen()">
+      <button type="button" class="add-cards-toggle" [attr.aria-expanded]="addCardsOpen()" (click)="toggleAddCards()">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        {{ 'decks.addCards' | t }}
+        <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      <div class="add-cards-body">
+        <div class="add-cards-inner">
+          @if (addCardsUsed()) {
+            <app-card-search [compact]="true" [language]="deckLanguage()" (picked)="addCard(deck.id, $event)" />
+          }
+        </div>
+      </div>
+    </section>
 
     @if (view() === 'overview') {
       <app-deck-overview

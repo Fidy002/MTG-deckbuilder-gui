@@ -78,7 +78,7 @@ export type FlagCode = 'gb' | 'de' | 'fr' | 'it' | 'es' | 'br' | 'jp' | 'kr' | '
       height: 15px;
       border-radius: var(--radius-sm);
       overflow: hidden;
-      outline: var(--line-width) solid var(--color-line);
+      box-shadow: 0 0 0 var(--line-width) var(--color-flag-frame);
     }
     svg {
       width: 100%;
