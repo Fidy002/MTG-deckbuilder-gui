@@ -25,14 +25,14 @@ export const DECK_EXPORT_FORMATS: readonly DeckExportFormat[] = [
     // Arena uses its own set codes, so only names are exported to avoid "card not found" errors.
     export: (entries) =>
       sectionBlocks(entries, ['commander', 'companion', 'main', 'sideboard'], (e) =>
-        entryLine(e, { withPrint: false, withFoil: false }),
+        entryLine(e, { withPrint: false, withFoil: false, withCategory: false }),
       ),
   },
   {
     id: 'mtgo',
     label: 'MTGO (.txt)',
     export: (entries) => {
-      const line = (e: DeckEntry) => entryLine(e, { withPrint: false, withFoil: false });
+      const line = (e: DeckEntry) => entryLine(e, { withPrint: false, withFoil: false, withCategory: false });
       const main = entries.filter((e) => e.section === 'main').map(line);
       const side = entries
         .filter((e) => e.section === 'commander' || e.section === 'companion' || e.section === 'sideboard')
@@ -44,7 +44,7 @@ export const DECK_EXPORT_FORMATS: readonly DeckExportFormat[] = [
     id: 'moxfield',
     label: 'Moxfield',
     export: (entries) =>
-      sectionBlocks(entries, ['commander', 'companion', 'main', 'sideboard', 'maybeboard'], (e) => entryLine(e)),
+      sectionBlocks(entries, ['commander', 'companion', 'main', 'sideboard', 'maybeboard'], (e) => entryLine(e, { withCategory: false })),
   },
   {
     id: 'archidekt',
@@ -52,9 +52,9 @@ export const DECK_EXPORT_FORMATS: readonly DeckExportFormat[] = [
     export: (entries) =>
       entries
         .map((e) => {
-          const line = entryLine(e, { countSuffix: 'x', upperCaseSet: false });
-          const category = ARCHIDEKT_CATEGORIES[e.section];
-          return category ? `${line} [${category}]` : line;
+          const line = entryLine(e, { countSuffix: 'x', upperCaseSet: false, withCategory: false });
+          const categories = [ARCHIDEKT_CATEGORIES[e.section], e.category].filter(Boolean);
+          return categories.length ? `${line} [${categories.join(',')}]` : line;
         })
         .join('\n'),
   },
@@ -63,7 +63,7 @@ export const DECK_EXPORT_FORMATS: readonly DeckExportFormat[] = [
     label: 'Text',
     export: (entries) =>
       sectionBlocks(entries, ['commander', 'companion', 'main', 'sideboard', 'maybeboard'], (e) =>
-        entryLine(e, { withPrint: false, withFoil: false }),
+        entryLine(e, { withPrint: false, withFoil: false, withCategory: false }),
       ),
   },
 ];

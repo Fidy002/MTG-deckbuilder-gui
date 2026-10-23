@@ -29,9 +29,13 @@ export class CardPreview {
   private readonly deckService = inject(DeckService);
 
   readonly card = input.required<ScryfallCard>();
+  readonly language = input<string>();
   readonly closed = output<void>();
 
-  private readonly request = computed(() => ({ card: this.card(), language: this.settings.cardLanguage() }));
+  private readonly request = computed(() => ({
+    card: this.card(),
+    language: this.language() ?? this.settings.cardLanguage(),
+  }));
 
   private readonly localized = toSignal(
     toObservable(this.request).pipe(

@@ -1,4 +1,3 @@
-
 export type DeckSection = 'commander' | 'companion' | 'main' | 'sideboard' | 'maybeboard';
 
 export const DECK_SECTIONS: readonly DeckSection[] = ['commander', 'companion', 'main', 'sideboard', 'maybeboard'];
@@ -9,6 +8,7 @@ export interface DeckEntry {
   set?: string;
   collectorNumber?: string;
   foil?: boolean;
+  category?: string;
   section: DeckSection;
 }
 
@@ -38,6 +38,12 @@ const SET_AND_NUMBER = /\s+\(([a-z0-9]{2,6})\)(?:\s+([^\s()]+))?\s*$/i;
 const FOIL_MARKER = /\s+\*(?:f|e|foil|etched)\*/gi;
 const ARCHIDEKT_TAGS = /\s*\^[^^]*\^/g;
 const ARCHIDEKT_CATEGORY = /\s*\[([^\]]*)\]/;
+
+// Archidekt's default categories are just the card types; those are not kept as custom categories.
+const TYPE_CATEGORIES = new Set([
+  'creature', 'creatures', 'planeswalker', 'planeswalkers', 'battle', 'battles', 'instant', 'instants',
+  'sorcery', 'sorceries', 'artifact', 'artifacts', 'enchantment', 'enchantments', 'land', 'lands',
+]);
 
 export function parseDecklist(text: string, options: ParseOptions = {}): DeckEntry[] {
   const entries: DeckEntry[] = [];
@@ -101,10 +107,13 @@ function parseCardLine(line: string, section: DeckSection): DeckEntry | undefine
 
   rest = rest.replace(ARCHIDEKT_TAGS, '');
 
-  const category = ARCHIDEKT_CATEGORY.exec(rest);
-  if (category) {
+  let customCategory: string | undefined;
+  const categories = ARCHIDEKT_CATEGORY.exec(rest);
+  if (categories) {
     rest = rest.replace(ARCHIDEKT_CATEGORY, '');
-    section = sectionFromCategory(category[1]) ?? section;
+    const parsed = parseCategories(categories[1]);
+    section = parsed.section ?? section;
+    customCategory = parsed.category;
   }
 
   const foil = rest.match(FOIL_MARKER) !== null;
@@ -122,18 +131,28 @@ function parseCardLine(line: string, section: DeckSection): DeckEntry | undefine
   if (foil) {
     entry.foil = true;
   }
+  if (customCategory) {
+    entry.category = customCategory;
+  }
   return entry.name && count > 0 ? entry : undefined;
 }
 
-function sectionFromCategory(categories: string): DeckSection | undefined {
-  for (const category of categories.split(',')) {
-    const name = category.replace(/\{[^}]*\}/g, '').trim().toLowerCase();
-    const section = HEADERS[name];
+function parseCategories(categories: string): { section?: DeckSection; category?: string } {
+  const result: { section?: DeckSection; category?: string } = {};
+  for (const raw of categories.split(',')) {
+    const name = raw.replace(/\{[^}]*\}/g, '').trim();
+    const section = HEADERS[name.toLowerCase()];
     if (section && section !== 'ignore') {
-      return section;
+      result.section ??= section;
+    } else if (name && !TYPE_CATEGORIES.has(name.toLowerCase())) {
+      result.category ??= name;
     }
   }
-  return undefined;
+  return result;
+}
+
+export function cleanCategory(category: string): string | undefined {
+  return category.replace(/[[\],{}]/g, '').trim() || undefined;
 }
 
 export function serializeDecklist(entries: readonly DeckEntry[]): string {
@@ -162,18 +181,22 @@ export const SECTION_HEADERS: Record<DeckSection, string> = {
 export interface EntryLineOptions {
   withPrint?: boolean;
   withFoil?: boolean;
+  withCategory?: boolean;
   countSuffix?: string;
   upperCaseSet?: boolean;
 }
 
 export function entryLine(entry: DeckEntry, options: EntryLineOptions = {}): string {
-  const { withPrint = true, withFoil = true, countSuffix = '', upperCaseSet = true } = options;
+  const { withPrint = true, withFoil = true, withCategory = true, countSuffix = '', upperCaseSet = true } = options;
   let line = `${entry.count}${countSuffix} ${entry.name}`;
   if (withPrint && entry.set && entry.collectorNumber) {
     line += ` (${upperCaseSet ? entry.set.toUpperCase() : entry.set}) ${entry.collectorNumber}`;
   }
   if (withFoil && entry.foil) {
     line += ' *F*';
+  }
+  if (withCategory && entry.category) {
+    line += ` [${entry.category}]`;
   }
   return line;
 }

@@ -1,46 +1,78 @@
-@if (state().status === 'loading') {
-  <p class="status">{{ 'overview.loading' | t }}</p>
-}
-@if (state().status === 'error') {
-  <p class="status error">{{ 'search.error' | t }}</p>
-}
-@if (notFound().length) {
-  <p class="notice">{{ 'overview.notFound' | t: { names: notFound().join(', ') } }}</p>
-}
-@if (fallbackCount()) {
-  <p class="notice subtle">{{ 'overview.fallback' | t: { count: fallbackCount(), language: languageName() } }}</p>
+<svg class="filters" aria-hidden="true" focusable="false">
+  <filter id="hover-water" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.03 0.045" numOctaves="1" seed="4" result="noise">
+      <animate attributeName="baseFrequency" dur="4s" values="0.03 0.045;0.04 0.032;0.03 0.045" repeatCount="indefinite" />
+    </feTurbulence>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" xChannelSelector="R" yChannelSelector="G" result="wave" />
+    <feGaussianBlur in="wave" stdDeviation="2.5" result="soft" />
+    <feComponentTransfer in="soft">
+      <feFuncA type="linear" slope="1.3" />
+    </feComponentTransfer>
+  </filter>
+  <filter id="hover-water-still" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.03 0.045" numOctaves="1" seed="4" result="noise" />
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" xChannelSelector="R" yChannelSelector="G" result="wave" />
+    <feGaussianBlur in="wave" stdDeviation="2.5" result="soft" />
+    <feComponentTransfer in="soft">
+      <feFuncA type="linear" slope="1.3" />
+    </feComponentTransfer>
+  </filter>
+</svg>
+
+@if (pending()) {
+  <div class="loading" role="status">
+    <span class="spinner" aria-hidden="true"></span>
+    <span class="caps-label">{{ 'overview.loading' | t }}</span>
+  </div>
 }
 
-@if (groups().length === 0 && state().status === 'done') {
-  <p class="status">{{ 'overview.empty' | t }}</p>
-}
+<div class="messages">
+  @if (state().status === 'error') {
+    <p class="status error">{{ 'search.error' | t }}</p>
+  }
+  @if (notFound().length) {
+    <p class="notice">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+      {{ 'overview.notFound' | t: { names: notFound().join(', ') } }}
+    </p>
+  }
+  @if (fallbackCount()) {
+    <p class="notice">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>
+      {{ 'overview.fallback' | t: { count: fallbackCount(), language: languageName() } }}
+    </p>
+  }
+  @if (groups().length === 0 && state().status === 'done') {
+    <p class="status">{{ 'overview.empty' | t }}</p>
+  }
+</div>
 
-<div class="groups">
+<div class="groups" [class.hidden]="pending()">
   @for (group of groups(); track group.id) {
     <section class="group">
       <h3>
-        {{ group.title | t }} <span class="count">{{ group.count }}</span>
+        <span>{{ group.title }}</span>
+        <span class="count">{{ group.count }}</span>
       </h3>
       <div class="stack">
         @for (card of group.cards; track $index) {
           <button
             type="button"
             class="card"
-            [title]="card.name"
+            [attr.aria-label]="card.name"
             [disabled]="!card.resolved"
-            (click)="selectedCard.set(card.resolved?.card)"
+            (click)="open(card)"
           >
             @if (card.image) {
               <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" />
             } @else {
-              <span class="placeholder">{{ card.name }}</span>
+              <span class="card-placeholder">{{ card.name }}</span>
             }
+            <span class="hit-area" aria-hidden="true" (mouseenter)="startHover(card, $event)" (mousemove)="trackPointer($event)" (mouseleave)="hidePreview()"></span>
             <span class="badges">
+              <span class="counter">x{{ card.entry.count }}</span>
               @if (card.resolved && !card.resolved.localized) {
-                <span class="badge lang" [title]="'overview.notLocalized' | t: { language: languageName() }">EN</span>
-              }
-              @if (card.entry.count > 1) {
-                <span class="badge">{{ card.entry.count }}×</span>
+                <span class="lang-tag" [title]="'overview.notLocalized' | t: { language: languageName() }">EN</span>
               }
             </span>
           </button>
@@ -50,6 +82,54 @@
   }
 </div>
 
-@if (selectedCard(); as card) {
-  <app-card-preview [card]="card" (closed)="selectedCard.set(undefined)" />
+<div class="embers" aria-hidden="true">
+  @for (ember of embers(); track ember.id) {
+    <span
+      class="ember"
+      [style.left.px]="ember.x"
+      [style.top.px]="ember.y"
+      [style.--size]="ember.size + 'px'"
+      [style.--dx]="ember.dx + 'px'"
+      [style.--dy]="ember.dy + 'px'"
+      [style.animation-delay.ms]="ember.delay"
+    ></span>
+  }
+</div>
+
+@if (hoverPreview(); as preview) {
+  <img
+    class="hover-preview"
+    [src]="preview.image"
+    [alt]="preview.name"
+    [style.left.px]="preview.left"
+    [style.top.px]="preview.top"
+    [style.width.px]="previewWidth"
+  />
+}
+
+@if (selected(); as card) {
+  @if (card.resolved; as resolved) {
+    <app-card-preview [card]="resolved.card" [language]="language()" (closed)="selected.set(undefined)">
+      <div class="deck-actions">
+        <label class="category-field">
+          <span class="caps-label">{{ 'overview.category' | t }}</span>
+          <input
+            type="text"
+            list="deck-categories"
+            [value]="card.entry.category ?? ''"
+            [placeholder]="'overview.categoryDefault' | t: { type: defaultCategory(card) }"
+            (change)="setCategory(card, $event)"
+          />
+          <datalist id="deck-categories">
+            @for (category of categories(); track category) {
+              <option [value]="category"></option>
+            }
+          </datalist>
+        </label>
+        <button type="button" (click)="setCommander(card, card.entry.section !== 'commander')">
+          {{ (card.entry.section === 'commander' ? 'overview.removeCommander' : 'overview.makeCommander') | t }}
+        </button>
+      </div>
+    </app-card-preview>
+  }
 }

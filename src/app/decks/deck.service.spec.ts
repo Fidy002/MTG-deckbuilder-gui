@@ -41,6 +41,25 @@ describe('DeckService', () => {
     expect(stored[0]).toMatchObject({ name: 'Burn', text: '4 Lightning Bolt' });
   });
 
+  it('stores a deck language and resets it to auto', () => {
+    const deck = service.create('Burn');
+    service.setLanguage(deck.id, 'de');
+    expect(service.get(deck.id)?.language).toBe('de');
+    service.setLanguage(deck.id, undefined);
+    expect(service.get(deck.id)?.language).toBeUndefined();
+  });
+
+  it('marks a card as commander and sets categories', () => {
+    const deck = service.create('Goblins');
+    service.updateText(deck.id, '1 Krenko, Mob Boss\n1 Sol Ring');
+    service.updateEntry(deck.id, { count: 1, name: 'Krenko, Mob Boss', section: 'main' }, { section: 'commander' });
+    service.updateEntry(deck.id, { count: 1, name: 'Sol Ring', section: 'main' }, { category: 'Ramp' });
+    expect(service.get(deck.id)?.text).toBe('Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Sol Ring [Ramp]');
+
+    service.updateEntry(deck.id, { count: 1, name: 'Sol Ring', section: 'main', category: 'Ramp' }, { category: undefined });
+    expect(service.get(deck.id)?.text).toBe('Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Sol Ring');
+  });
+
   it('counts played cards, without sideboard', () => {
     expect(countCards('4 Lightning Bolt\n2x Shock\n20 Mountain\n\nSideboard\n3 Duress')).toBe(26);
   });

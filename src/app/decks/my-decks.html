@@ -1,6 +1,8 @@
-<aside>
-  <button type="button" class="new" (click)="create()">+ {{ 'decks.new' | t }}</button>
-  <button type="button" class="new" (click)="importMode.set('new')">⤓ {{ 'import.newDeck' | t }}</button>
+<aside class="panel">
+  <div class="actions">
+    <button type="button" class="primary" (click)="create()">{{ 'decks.new' | t }}</button>
+    <button type="button" (click)="importMode.set('new')">{{ 'import.newDeck' | t }}</button>
+  </div>
 
   @if (decks().length) {
     <ul>
@@ -20,8 +22,8 @@
 
 <section class="editor">
   @if (deck(); as deck) {
-    <label class="field">
-      <span>{{ 'decks.name' | t }}</span>
+    <label class="name-field">
+      <span class="visually-hidden">{{ 'decks.name' | t }}</span>
       <input
         type="text"
         class="name-input"
@@ -32,7 +34,7 @@
     </label>
 
     <div class="toolbar">
-      <div class="tabs" role="tablist">
+      <div class="tab-bar" role="tablist">
         <button type="button" role="tab" [class.active]="view() === 'overview'" [attr.aria-selected]="view() === 'overview'" (click)="view.set('overview')">
           {{ 'decks.viewOverview' | t }}
         </button>
@@ -43,7 +45,26 @@
 
       <span class="spacer"></span>
 
-      <button type="button" (click)="importMode.set('replace')">⤓ {{ 'import.button' | t }}</button>
+      @if (view() === 'overview') {
+        <label class="sort">
+          <span class="caps-label">{{ 'decks.sortBy' | t }}</span>
+          <select (change)="setSort($event)">
+            @for (option of sortOptions; track option.value) {
+              <option [value]="option.value" [selected]="option.value === sort()">{{ option.label | t }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <app-language-select
+        class="deck-language"
+        [label]="'decks.language' | t"
+        [options]="deckLanguageOptions()"
+        [value]="deckLanguageValue()"
+        (valueChange)="setDeckLanguage(deck.id, $event)"
+      />
+
+      <button type="button" (click)="importMode.set('replace')">{{ 'import.button' | t }}</button>
 
       <div class="export">
         <button
@@ -53,11 +74,12 @@
           [disabled]="entries().length === 0"
           (click)="exportMenuOpen.set(!exportMenuOpen())"
         >
-          ⤒ {{ 'export.button' | t }} ▾
+          {{ 'export.button' | t }}
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
         </button>
         @if (exportMenuOpen()) {
-          <div class="menu" role="menu">
-            <p class="menu-hint">{{ 'export.hint' | t }}</p>
+          <div class="menu panel" role="menu">
+            <p class="caps-label menu-hint">{{ 'export.hint' | t }}</p>
             @for (format of exportFormats; track format.id) {
               <button type="button" role="menuitem" (click)="export(format)">{{ format.label }}</button>
             }
@@ -67,14 +89,21 @@
     </div>
 
     @if (toast(); as toast) {
-      <p class="toast" [class.error]="toast.error" role="status">{{ toast.key | t: { format: toast.format ?? '' } }}</p>
+      <p class="notice toast" [class.error]="toast.error" role="status">
+        @if (toast.error) {
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+        } @else {
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
+        }
+        {{ toast.key | t: { format: toast.format ?? '' } }}
+      </p>
     }
 
     @if (view() === 'overview') {
-      <app-deck-overview [entries]="entries()" />
+      <app-deck-overview [entries]="entries()" [language]="deckLanguage()" [deckId]="deck.id" [sort]="sort()" />
     } @else {
-      <label class="field list">
-        <span>{{ 'decks.list' | t }}</span>
+      <label class="list-field">
+        <span class="caps-label">{{ 'decks.list' | t }}</span>
         <textarea
           spellcheck="false"
           [value]="deck.text"

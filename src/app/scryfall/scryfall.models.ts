@@ -33,6 +33,7 @@ export interface ScryfallCard {
   set_name: string;
   collector_number: string;
   rarity: ScryfallRarity;
+  cmc?: number;
   mana_cost?: string;
   type_line?: string;
   printed_type_line?: string;

@@ -4,9 +4,13 @@ import { CARD_LANGUAGES, DEFAULT_CARD_LANGUAGE } from '../scryfall/card-language
 
 const STORAGE_KEY = 'mtg-deckbuilder.settings';
 
+export type DeckSort = 'category' | 'type' | 'mana';
+const DECK_SORTS: readonly DeckSort[] = ['category', 'type', 'mana'];
+
 interface StoredSettings {
   uiLanguage?: string;
   cardLanguage?: string;
+  deckSort?: DeckSort;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -21,11 +25,16 @@ export class SettingsService {
     validCardLanguage(this.stored.cardLanguage) ?? validCardLanguage(browserLanguage()) ?? DEFAULT_CARD_LANGUAGE,
   );
 
+  readonly deckSort = signal<DeckSort>(
+    DECK_SORTS.includes(this.stored.deckSort as DeckSort) ? this.stored.deckSort! : 'category',
+  );
+
   constructor() {
     effect(() => {
       const settings: StoredSettings = {
         uiLanguage: this.uiLanguage(),
         cardLanguage: this.cardLanguage(),
+        deckSort: this.deckSort(),
       };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));

@@ -10,46 +10,42 @@ import { ScryfallCard, cardDisplayName, cardFaces } from '../scryfall/scryfall.m
       @if (image(); as src) {
         <img [src]="src" [alt]="name()" loading="lazy" width="488" height="680" />
       } @else {
-        <span class="placeholder">
-          <strong>{{ name() }}</strong>
+        <span class="card-placeholder">
+          {{ name() }}
           <small>{{ 'card.noImage' | t }}</small>
         </span>
       }
     </button>
   `,
   styles: `
+    :host {
+      display: block;
+      filter: var(--shadow-stack);
+    }
     button {
       display: block;
       width: 100%;
+      height: auto;
       padding: 0;
       border: none;
-      background: none;
-      cursor: pointer;
-      border-radius: 4.75% / 3.5%;
+      border-radius: var(--radius-card);
       overflow: hidden;
-      transition: transform 120ms ease, box-shadow 120ms ease;
+      white-space: normal;
+      transition: transform var(--transition-fast);
     }
     button:hover,
     button:focus-visible {
-      transform: translateY(-3px) scale(1.02);
-      box-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+      transform: translateY(-2px);
     }
     img {
       display: block;
       width: 100%;
       height: auto;
-      aspect-ratio: 488 / 680;
-      background: var(--surface-2);
+      aspect-ratio: var(--card-ratio);
+      background: var(--color-surface-sunken);
     }
-    .placeholder {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      gap: 0.5rem;
-      aspect-ratio: 488 / 680;
-      padding: 1rem;
-      background: var(--surface-2);
-      color: var(--text);
+    .card-placeholder {
+      border-radius: inherit;
     }
   `,
 })

@@ -1,6 +1,6 @@
 <div class="backdrop" (click)="closed.emit()"></div>
 
-<div class="dialog" role="dialog" aria-modal="true" [attr.aria-label]="'import.title' | t">
+<div class="dialog panel" role="dialog" aria-modal="true" [attr.aria-label]="'import.title' | t">
   <h2>{{ 'import.title' | t }}</h2>
   <p class="muted">{{ 'import.formats' | t }}</p>
 
@@ -14,20 +14,23 @@
 
   @switch (error()) {
     @case ('empty') {
-      <p class="error">{{ 'import.empty' | t }}</p>
+      <p class="status error">{{ 'import.empty' | t }}</p>
     }
     @case ('clipboard') {
-      <p class="error">{{ 'import.clipboardError' | t }}</p>
+      <p class="status error">{{ 'import.clipboardError' | t }}</p>
     }
   }
   @if (replacesDeck()) {
-    <p class="muted">{{ 'import.replaceHint' | t }}</p>
+    <p class="notice">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+      {{ 'import.replaceHint' | t }}
+    </p>
   }
 
   <footer>
-    <button type="button" (click)="pasteFromClipboard()" [disabled]="busy()">📋 {{ 'import.paste' | t }}</button>
+    <button type="button" (click)="pasteFromClipboard()" [disabled]="busy()">{{ 'import.paste' | t }}</button>
     <span class="spacer"></span>
-    <button type="button" (click)="closed.emit()">{{ 'import.cancel' | t }}</button>
+    <button type="button" class="cancel" (click)="closed.emit()">{{ 'import.cancel' | t }}</button>
     <button type="button" class="primary" (click)="import()" [disabled]="busy() || !text().trim()">
       {{ (busy() ? 'import.busy' : 'import.submit') | t }}
     </button>

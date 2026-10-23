@@ -1,4 +1,4 @@
-<span class="label">{{ 'sets.label' | t }}</span>
+<span class="caps-label">{{ 'sets.label' | t }}</span>
 
 <button
   type="button"
@@ -9,11 +9,11 @@
   (click)="open.set(!open())"
 >
   <span class="summary">{{ summary() }}</span>
-  <span aria-hidden="true">▾</span>
+  <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
 </button>
 
 @if (open()) {
-  <div class="panel">
+  <div class="panel dropdown">
     <div class="toolbar">
       <input
         #filterInput

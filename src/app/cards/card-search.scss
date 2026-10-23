@@ -1,13 +1,14 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
 }
 
 .filters {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: var(--space-4);
 }
 
 .sets {
@@ -19,41 +20,21 @@
   display: flex;
   flex: 1 1 400px;
   flex-direction: column;
-  gap: 0.35rem;
-
-  span {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-  }
-
-  input {
-    padding: 0.75rem 1rem;
-    font-size: 1rem;
-  }
+  gap: var(--space-2);
 }
 
-.status {
-  color: var(--text-muted);
-
-  &.error {
-    color: var(--error-text);
-  }
-}
-
-.notice {
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  background: var(--warning-bg);
-  color: var(--warning-text);
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(var(--stack-width), 1fr));
+  gap: var(--space-6) var(--space-5);
 }
 
 .load-more {
-  display: block;
-  margin: 1.5rem auto;
+  align-self: center;
 }

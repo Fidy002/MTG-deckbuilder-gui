@@ -7,11 +7,13 @@ export interface Deck {
   id: string;
   name: string;
   text: string;
+  language?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export type NewDeckCard = Pick<DeckEntry, 'name' | 'set' | 'collectorNumber'>;
+export type EntryChanges = Partial<Pick<DeckEntry, 'section' | 'category'>>;
 
 @Injectable({ providedIn: 'root' })
 export class DeckService {
@@ -55,6 +57,10 @@ export class DeckService {
     this.patch(id, { text });
   }
 
+  setLanguage(id: string, language: string | undefined): void {
+    this.patch(id, { language });
+  }
+
   delete(id: string): void {
     this.state.update((decks) => decks.filter((deck) => deck.id !== id));
   }
@@ -75,7 +81,25 @@ export class DeckService {
     this.updateText(id, serializeDecklist(entries));
   }
 
-  private patch(id: string, changes: Partial<Pick<Deck, 'name' | 'text'>>): void {
+  updateEntry(id: string, entry: DeckEntry, changes: EntryChanges): void {
+    const deck = this.get(id);
+    if (!deck) {
+      return;
+    }
+    const entries: DeckEntry[] = [];
+    for (const current of parseDecklist(deck.text)) {
+      const updated = isSameCard(current, entry) ? withChanges(current, changes) : current;
+      const duplicate = entries.find((e) => isSameCard(e, updated) && e.category === updated.category);
+      if (duplicate) {
+        duplicate.count += updated.count;
+      } else {
+        entries.push(updated);
+      }
+    }
+    this.updateText(id, serializeDecklist(entries));
+  }
+
+  private patch(id: string, changes: Partial<Pick<Deck, 'name' | 'text' | 'language'>>): void {
     const updatedAt = new Date().toISOString();
     this.state.update((decks) =>
       decks
@@ -83,6 +107,14 @@ export class DeckService {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     );
   }
+}
+
+function withChanges(entry: DeckEntry, changes: EntryChanges): DeckEntry {
+  const updated = { ...entry, ...changes };
+  if (!updated.category) {
+    delete updated.category;
+  }
+  return updated;
 }
 
 export function countCards(text: string): number {

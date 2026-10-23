@@ -22,7 +22,7 @@ describe('parseDecklist', () => {
     );
     expect(entries).toEqual([
       { count: 1, name: 'Krenko, Mob Boss', set: 'm13', collectorNumber: '141', section: 'commander' },
-      { count: 4, name: 'Lightning Bolt', set: 'm10', collectorNumber: '146', foil: true, section: 'main' },
+      { count: 4, name: 'Lightning Bolt', set: 'm10', collectorNumber: '146', foil: true, category: 'Burn', section: 'main' },
       { count: 1, name: 'Pyroblast', section: 'sideboard' },
     ]);
   });
@@ -38,6 +38,14 @@ describe('parseDecklist', () => {
       { count: 2, name: 'Shock', section: 'main' },
       { count: 1, name: 'Duress', section: 'sideboard' },
       { count: 1, name: 'Fire // Ice', section: 'main' },
+    ]);
+  });
+
+  it('keeps custom categories but not Archidekt type categories', () => {
+    expect(parseDecklist('1x Sol Ring (c21) 263 [Ramp]\n1x Shock [Instant]\n1x Krenko [Commander{top},Goblins]')).toEqual([
+      { count: 1, name: 'Sol Ring', set: 'c21', collectorNumber: '263', category: 'Ramp', section: 'main' },
+      { count: 1, name: 'Shock', section: 'main' },
+      { count: 1, name: 'Krenko', category: 'Goblins', section: 'commander' },
     ]);
   });
 
@@ -74,6 +82,12 @@ describe('export formats', () => {
     expect(exportAs('archidekt', entries)).toBe(
       '1x Krenko, Mob Boss (m13) 141 [Commander{top}]\n4x Lightning Bolt (m10) 146\n2x Pyroblast [Sideboard{noDeck}{noPrice}]',
     );
+  });
+
+  it('Archidekt keeps custom categories, other formats drop them', () => {
+    const withCategory: DeckEntry[] = [{ count: 1, name: 'Sol Ring', category: 'Ramp', section: 'main' }];
+    expect(exportAs('archidekt', withCategory)).toBe('1x Sol Ring [Ramp]');
+    expect(exportAs('arena', withCategory)).toBe('Deck\n1 Sol Ring');
   });
 
   it('every export can be imported again', () => {

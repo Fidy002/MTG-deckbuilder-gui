@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, concatMap, from, map, of, reduce, tap } from 'rxjs';
+import { Observable, concatMap, defer, from, map, of, reduce, switchMap, tap } from 'rxjs';
 import { ScryfallCard, cardNameVariants } from '../scryfall/scryfall.models';
+import { PersistentCache } from '../scryfall/persistent-cache';
 import { ScryfallService } from '../scryfall/scryfall.service';
 import { DeckEntry } from './decklist';
 
@@ -13,60 +14,72 @@ export function cardKey(entry: Pick<DeckEntry, 'name' | 'set' | 'collectorNumber
   return [entry.name.toLowerCase(), entry.set ?? '', entry.collectorNumber ?? ''].join('|');
 }
 
-const NAMES_PER_QUERY = 15;
-const PRINTS_PER_QUERY = 20;
+const NAMES_PER_QUERY = 40;
+const PRINTS_PER_QUERY = 40;
+
+// Scryfall asks to cache card data for at least 24 hours; gameplay data rarely changes.
+const CARD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const NOT_FOUND_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_PREFIX = 'card:';
 
 // Preference per entry: exact printing in that language → any printing in that language → English.
 @Injectable({ providedIn: 'root' })
 export class DeckCardsService {
   private readonly scryfall = inject(ScryfallService);
+  private readonly persistent = inject(PersistentCache);
 
   private readonly cache = new Map<string, ResolvedCard | null>();
 
   resolve(entries: readonly DeckEntry[], language: string): Observable<Map<string, ResolvedCard | null>> {
     const unique = [...new Map(entries.map((e) => [cardKey(e), e])).values()];
-    const missing = unique.filter((e) => !this.cache.has(`${language}|${cardKey(e)}`));
+    const keyOf = (e: DeckEntry) => `${language}|${cardKey(e)}`;
 
-    const lookup$: Observable<unknown> =
-      missing.length === 0
-        ? of(undefined)
-        : this.find(missing, language).pipe(
-            concatMap((found) => {
-              const stillMissing = missing.filter((e) => !found.has(cardKey(e)));
-              const fallback$ =
-                language === 'en' || stillMissing.length === 0
-                  ? of(new Map<string, ScryfallCard>())
-                  : this.find(stillMissing, 'en');
-              return fallback$.pipe(
-                tap((english) => {
-                  for (const entry of missing) {
-                    const key = cardKey(entry);
-                    const localizedCard = found.get(key);
-                    const englishCard = english.get(key);
-                    this.cache.set(
-                      `${language}|${key}`,
-                      localizedCard
-                        ? { card: localizedCard, localized: true }
-                        : englishCard
-                          ? { card: englishCard, localized: false }
-                          : null,
-                    );
-                  }
-                }),
-              );
-            }),
-          );
+    return defer(async () => {
+      const notInMemory = unique.filter((e) => !this.cache.has(keyOf(e)));
+      if (notInMemory.length) {
+        const stored = await this.persistent.getMany<ResolvedCard | null>(notInMemory.map((e) => CACHE_PREFIX + keyOf(e)));
+        for (const [key, value] of stored) {
+          this.cache.set(key.slice(CACHE_PREFIX.length), value);
+        }
+      }
+      return unique.filter((e) => !this.cache.has(keyOf(e)));
+    }).pipe(
+      switchMap((missing) => (missing.length ? this.fetch(missing, language) : of(undefined))),
+      map(() => new Map(unique.map((e): [string, ResolvedCard | null] => [cardKey(e), this.cache.get(keyOf(e)) ?? null]))),
+    );
+  }
 
-    return lookup$.pipe(
-      map(
-        () =>
-          new Map(
-            unique.map((e): [string, ResolvedCard | null] => [
-              cardKey(e),
-              this.cache.get(`${language}|${cardKey(e)}`) ?? null,
-            ]),
-          ),
-      ),
+  private fetch(missing: readonly DeckEntry[], language: string): Observable<unknown> {
+    return this.find(missing, language).pipe(
+      concatMap((found) => {
+        const stillMissing = missing.filter((e) => !found.has(cardKey(e)));
+        const fallback$ =
+          language === 'en' || stillMissing.length === 0 ? of(new Map<string, ScryfallCard>()) : this.find(stillMissing, 'en');
+        return fallback$.pipe(
+          tap((english) => {
+            const resolved: [string, ResolvedCard][] = [];
+            const notFound: [string, null][] = [];
+            for (const entry of missing) {
+              const key = `${language}|${cardKey(entry)}`;
+              const localizedCard = found.get(cardKey(entry));
+              const englishCard = english.get(cardKey(entry));
+              const result = localizedCard
+                ? { card: localizedCard, localized: true }
+                : englishCard
+                  ? { card: englishCard, localized: false }
+                  : null;
+              this.cache.set(key, result);
+              if (result) {
+                resolved.push([CACHE_PREFIX + key, result]);
+              } else {
+                notFound.push([CACHE_PREFIX + key, null]);
+              }
+            }
+            void this.persistent.setMany(resolved, CARD_TTL_MS);
+            void this.persistent.setMany(notFound, NOT_FOUND_TTL_MS);
+          }),
+        );
+      }),
     );
   }
 

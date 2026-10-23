@@ -1,16 +1,21 @@
 <div class="backdrop" (click)="closed.emit()"></div>
 
-<div class="dialog" role="dialog" aria-modal="true" [attr.aria-label]="name()">
-  <button type="button" class="close" (click)="closed.emit()" [attr.aria-label]="'card.close' | t">✕</button>
+<div class="dialog panel" role="dialog" aria-modal="true" [attr.aria-label]="name()">
+  <button type="button" class="close" (click)="closed.emit()" [attr.aria-label]="'card.close' | t">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+  </button>
 
   <div class="image">
     @if (image(); as src) {
       <img [src]="src" [alt]="name()" />
     } @else {
-      <div class="placeholder">{{ 'card.noImage' | t }}</div>
+      <div class="card-placeholder">{{ 'card.noImage' | t }}</div>
     }
     @if (canFlip()) {
-      <button type="button" class="flip" (click)="flip()">⟲ {{ 'card.flip' | t }}</button>
+      <button type="button" class="flip" (click)="flip()">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5" /></svg>
+        {{ 'card.flip' | t }}
+      </button>
     }
   </div>
 
@@ -18,7 +23,10 @@
     <h2>{{ name() }}</h2>
 
     @if (missingLanguage(); as language) {
-      <p class="notice">{{ 'card.notAvailableInLanguage' | t: { language } }}</p>
+      <p class="notice">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>
+        {{ 'card.notAvailableInLanguage' | t: { language } }}
+      </p>
     }
 
     @for (face of faces(); track $index) {
@@ -28,15 +36,15 @@
         }
         <dl>
           @if (face.manaCost) {
-            <dt>{{ 'card.manaCost' | t }}</dt>
+            <dt class="caps-label">{{ 'card.manaCost' | t }}</dt>
             <dd>{{ face.manaCost }}</dd>
           }
           @if (face.typeLine) {
-            <dt>{{ 'card.type' | t }}</dt>
+            <dt class="caps-label">{{ 'card.type' | t }}</dt>
             <dd>{{ face.typeLine }}</dd>
           }
           @if (face.text) {
-            <dt>{{ 'card.text' | t }}</dt>
+            <dt class="caps-label">{{ 'card.text' | t }}</dt>
             <dd class="text">{{ face.text }}</dd>
           }
         </dl>
@@ -44,13 +52,15 @@
     }
 
     <dl>
-      <dt>{{ 'card.set' | t }}</dt>
+      <dt class="caps-label">{{ 'card.set' | t }}</dt>
       <dd>{{ shown().set_name }} ({{ shown().set.toUpperCase() }})</dd>
-      <dt>{{ 'card.collectorNumber' | t }}</dt>
+      <dt class="caps-label">{{ 'card.collectorNumber' | t }}</dt>
       <dd>{{ shown().collector_number }}</dd>
-      <dt>{{ 'card.rarity' | t }}</dt>
+      <dt class="caps-label">{{ 'card.rarity' | t }}</dt>
       <dd>{{ rarityKey() | t }}</dd>
     </dl>
+
+    <ng-content />
 
     <div class="add-to-deck">
       @if (decks().length) {
@@ -63,13 +73,19 @@
         </select>
       }
       <button type="button" (click)="addToDeck()">
-        + {{ (decks().length ? 'card.addToDeck' : 'card.addToNewDeck') | t }}
+        {{ (decks().length ? 'card.addToDeck' : 'card.addToNewDeck') | t }}
       </button>
       @if (addedTo(); as deck) {
-        <span class="added" role="status">✓ {{ 'card.added' | t: { deck } }}</span>
+        <p class="notice added" role="status">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
+          {{ 'card.added' | t: { deck } }}
+        </p>
       }
     </div>
 
-    <a [href]="shown().scryfall_uri" target="_blank" rel="noopener">{{ 'card.openOnScryfall' | t }} ↗</a>
+    <a class="external" [href]="shown().scryfall_uri" target="_blank" rel="noopener">
+      {{ 'card.openOnScryfall' | t }}
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M18 14v5H5V6h5" /></svg>
+    </a>
   </div>
 </div>

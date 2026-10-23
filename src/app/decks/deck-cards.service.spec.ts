@@ -25,7 +25,7 @@ describe('DeckCardsService', () => {
 
   afterEach(() => http.verify());
 
-  it('prefers the exact printing in the card language and falls back to English', () => {
+  it('prefers the exact printing in the card language and falls back to English', async () => {
     const bolt: DeckEntry = { count: 4, name: 'Lightning Bolt', set: 'm10', collectorNumber: '146', section: 'main' };
     const mountain: DeckEntry = { count: 20, name: 'Mountain', section: 'main' };
     let result: Map<string, ResolvedCard | null> | undefined;
@@ -34,6 +34,7 @@ describe('DeckCardsService', () => {
 
     const query = () => http.expectOne((r) => r.url.endsWith('/cards/search'));
 
+    await new Promise((resolve) => setTimeout(resolve));
     let request = query();
     expect(request.request.params.get('q')).toBe('((set:m10 cn:"146")) lang:de');
     request.flush(list([card('Lightning Bolt', 'de', 'm10', '146')]));
@@ -50,5 +51,6 @@ describe('DeckCardsService', () => {
     expect(result?.get(cardKey(mountain))).toMatchObject({ localized: false, card: { lang: 'en' } });
 
     service.resolve([bolt, mountain], 'de').subscribe();
+    await new Promise((resolve) => setTimeout(resolve));
   });
 });
