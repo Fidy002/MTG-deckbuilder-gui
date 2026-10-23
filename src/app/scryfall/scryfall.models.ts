@@ -34,6 +34,7 @@ export interface ScryfallCard {
   collector_number: string;
   rarity: ScryfallRarity;
   cmc?: number;
+  color_identity?: string[];
   mana_cost?: string;
   type_line?: string;
   printed_type_line?: string;
@@ -134,3 +135,11 @@ export function cardNameVariants(card: ScryfallCard): string[] {
 export function hasMultipleImages(card: ScryfallCard): boolean {
   return !card.image_uris && (card.card_faces?.filter((f) => f.image_uris).length ?? 0) > 1;
 }
+
+const SYMBOL_URL = 'https://svgs.scryfall.io/card-symbols';
+
+export function manaSymbolUrl(symbol: string): string {
+  return `${SYMBOL_URL}/${encodeURIComponent(symbol)}.svg`;
+}
+
+export const COLOR_ORDER = ['W', 'U', 'B', 'R', 'G'] as const;

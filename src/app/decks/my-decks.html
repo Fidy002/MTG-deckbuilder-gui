@@ -9,7 +9,16 @@
       @for (item of decks(); track item.id) {
         <li>
           <a [routerLink]="['/decks', item.id]" routerLinkActive="active">
-            <span class="name">{{ item.name.trim() || ('decks.untitled' | t) }}</span>
+            <span class="name-row">
+              <span class="name">{{ item.name.trim() || ('decks.untitled' | t) }}</span>
+              @if (item.colorSymbols; as symbols) {
+                <span class="list-colors" [attr.aria-label]="'decks.colors' | t">
+                  @for (symbol of symbols; track symbol) {
+                    <img [src]="manaSymbolUrl(symbol)" [alt]="symbol" width="14" height="14" />
+                  }
+                </span>
+              }
+            </span>
             <small>{{ 'decks.cardCount' | t: { count: item.cardCount } }}</small>
           </a>
         </li>
@@ -22,16 +31,25 @@
 
 <section class="editor">
   @if (deck(); as deck) {
-    <label class="name-field">
-      <span class="visually-hidden">{{ 'decks.name' | t }}</span>
-      <input
-        type="text"
-        class="name-input"
-        [value]="deck.name"
-        (input)="rename(deck.id, $event)"
-        [placeholder]="'decks.untitled' | t"
-      />
-    </label>
+    <div class="title-row">
+      <label class="name-field">
+        <span class="visually-hidden">{{ 'decks.name' | t }}</span>
+        <input
+          type="text"
+          class="name-input"
+          [value]="deck.name"
+          (input)="rename(deck.id, $event)"
+          [placeholder]="'decks.untitled' | t"
+        />
+      </label>
+      @if (deck.colorSymbols; as symbols) {
+        <span class="deck-colors" [attr.aria-label]="'decks.colors' | t">
+          @for (symbol of symbols; track symbol) {
+            <img [src]="manaSymbolUrl(symbol)" [alt]="symbol" width="28" height="28" />
+          }
+        </span>
+      }
+    </div>
 
     <div class="toolbar">
       <div class="tab-bar" role="tablist">
@@ -100,7 +118,13 @@
     }
 
     @if (view() === 'overview') {
-      <app-deck-overview [entries]="entries()" [language]="deckLanguage()" [deckId]="deck.id" [sort]="sort()" />
+      <app-deck-overview
+        [entries]="entries()"
+        [language]="deckLanguage()"
+        [deckId]="deck.id"
+        [sort]="sort()"
+        (colorsChange)="setDeckColors(deck.id, $event)"
+      />
     } @else {
       <label class="list-field">
         <span class="caps-label">{{ 'decks.list' | t }}</span>

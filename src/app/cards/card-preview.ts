@@ -14,10 +14,11 @@ import {
   hasMultipleImages,
 } from '../scryfall/scryfall.models';
 import { ScryfallService } from '../scryfall/scryfall.service';
+import { ManaText } from './mana-text';
 
 @Component({
   selector: 'app-card-preview',
-  imports: [TranslatePipe],
+  imports: [TranslatePipe, ManaText],
   host: { '(document:keydown.escape)': 'closed.emit()' },
   templateUrl: './card-preview.html',
   styleUrl: './card-preview.scss',

@@ -1,12 +1,14 @@
-import { Component, DestroyRef, computed, inject, input, linkedSignal, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, linkedSignal, output, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, debounce, map, of, startWith, switchMap, timer } from 'rxjs';
 import { CardPreview } from '../cards/card-preview';
 import { I18nService } from '../i18n/i18n.service';
 import { TranslatePipe } from '../i18n/translate.pipe';
 import { cardLanguageName } from '../scryfall/card-languages';
-import { ScryfallCard, cardDisplayName, cardFaces } from '../scryfall/scryfall.models';
+import { COLOR_ORDER, ScryfallCard, cardDisplayName, cardFaces, manaSymbolUrl } from '../scryfall/scryfall.models';
 import { DeckSort } from '../settings/settings.service';
+import { CardHover } from '../shared/card-hover/card-hover';
+import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.service';
 import { AUTO_CATEGORIES, autoCategory } from './auto-categories';
 import { DeckCardsService, ResolvedCard, cardKey } from './deck-cards.service';
 import { DeckGroupId, deckGroupName, manaValueGroupName } from './deck-group-names';
@@ -19,7 +21,12 @@ const TYPE_ORDER: readonly CardType[] = [
   'creature', 'planeswalker', 'battle', 'instant', 'sorcery', 'artifact', 'enchantment', 'land', 'other',
 ];
 const MAX_MANA_GROUP = 7;
-const CARD_ASPECT = 488 / 680;
+
+// Card height is 139% of its width; each card in a stack overlaps the previous one by 111% of the width,
+// leaving its title bar plus a strip of art (for the count) visible.
+const CARD_HEIGHT_RATIO = 680 / 488;
+const STACK_OVERLAP = 1.11;
+const VISIBLE_STRIP = `${(((CARD_HEIGHT_RATIO - STACK_OVERLAP) / CARD_HEIGHT_RATIO) * 100).toFixed(2)}%`;
 
 const TYPE_PRIORITY: readonly CardType[] = [
   'land', 'creature', 'planeswalker', 'battle', 'instant', 'sorcery', 'artifact', 'enchantment',
@@ -33,37 +40,12 @@ interface OverviewCard {
   resolved?: ResolvedCard | null;
 }
 
-interface HoverPreview {
-  image: string;
-  name: string;
-  left: number;
-  top: number;
-}
-
-const HOVER_DELAY_MS = 500;
-const PREVIEW_WIDTH = 320;
-const PREVIEW_GAP = 16;
-const VIEWPORT_MARGIN = 8;
-
-interface Ember {
-  id: number;
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
-  size: number;
-  delay: number;
-}
-
-const EMBER_COUNT = 12;
-const EMBER_LIFETIME_MS = 300;
-const EMBER_MAX_DELAY_MS = 60;
-
 interface OverviewGroup {
   id: string;
   title: string;
   count: number;
   cards: OverviewCard[];
+  manaValue?: { symbol: string; orMore: boolean };
 }
 
 type ResolveState =
@@ -73,8 +55,7 @@ type ResolveState =
 
 @Component({
   selector: 'app-deck-overview',
-  imports: [TranslatePipe, CardPreview],
-  host: { '(window:scroll)': 'hidePreview()' },
+  imports: [TranslatePipe, CardPreview, CardHover],
   templateUrl: './deck-overview.html',
   styleUrl: './deck-overview.scss',
 })
@@ -87,6 +68,9 @@ export class DeckOverview {
   readonly language = input.required<string>();
   readonly deckId = input.required<string>();
   readonly sort = input.required<DeckSort>();
+  readonly colorsChange = output<string[]>();
+
+  protected readonly manaSymbolUrl = manaSymbolUrl;
 
   protected readonly selected = signal<OverviewCard | undefined>(undefined);
   private lastRequestedDeck?: string;
@@ -147,9 +131,9 @@ export class DeckOverview {
 
     const language = this.language();
     const groups: OverviewGroup[] = [];
-    const add = (id: string, title: string, groupCards: OverviewCard[]) => {
+    const add = (id: string, title: string, groupCards: OverviewCard[], extra: Partial<OverviewGroup> = {}) => {
       if (groupCards.length) {
-        groups.push({ id, title, cards: groupCards, count: groupCards.reduce((sum, c) => sum + c.entry.count, 0) });
+        groups.push({ id, title, cards: groupCards, count: groupCards.reduce((sum, c) => sum + c.entry.count, 0), ...extra });
       }
     };
     const addFixed = (id: DeckGroupId, groupCards: OverviewCard[]) => add(id, deckGroupName(id, language), groupCards);
@@ -183,7 +167,9 @@ export class DeckOverview {
         const spells = main.filter((c) => c.resolved && cardType(c.resolved.card) !== 'land');
         for (let value = 0; value <= MAX_MANA_GROUP; value++) {
           const label = value === MAX_MANA_GROUP ? `${value}+` : String(value);
-          add(`mana:${value}`, manaValueGroupName(label, language), spells.filter((c) => manaGroup(c.resolved!.card) === value));
+          add(`mana:${value}`, manaValueGroupName(label, language), spells.filter((c) => manaGroup(c.resolved!.card) === value), {
+            manaValue: { symbol: String(value), orMore: value === MAX_MANA_GROUP },
+          });
         }
         addFixed('land', main.filter((c) => c.resolved && cardType(c.resolved.card) === 'land'));
         addFixed('other', main.filter((c) => !c.resolved));
@@ -213,81 +199,34 @@ export class DeckOverview {
     this.updateSelected(card, { category: cleanCategory((event.target as HTMLInputElement).value) });
   }
 
-  protected readonly previewWidth = PREVIEW_WIDTH;
-  protected readonly hoverPreview = signal<HoverPreview | undefined>(undefined);
-  private hoverTimer?: ReturnType<typeof setTimeout>;
-  protected readonly embers = signal<Ember[]>([]);
-  private nextEmberId = 0;
-  private pointerY = 0;
+  private readonly hoverOverlay = inject(CardHoverOverlay);
+  protected readonly visibleStrip = VISIBLE_STRIP;
+  protected readonly stackOverlap = `-${STACK_OVERLAP * 100}%`;
+
+  private readonly colors = computed(() => {
+    if (this.pending()) {
+      return undefined;
+    }
+    const resolved = this.resolved();
+    const identity = new Set(
+      this.entries()
+        .filter((e) => e.section === 'commander' || e.section === 'companion' || e.section === 'main')
+        .flatMap((e) => resolved.get(cardKey(e))?.card.color_identity ?? []),
+    );
+    return COLOR_ORDER.filter((color) => identity.has(color));
+  });
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => clearTimeout(this.hoverTimer));
-  }
-
-  protected trackPointer(event: MouseEvent): void {
-    this.pointerY = event.clientY;
-  }
-
-  protected startHover(card: OverviewCard, event: MouseEvent): void {
-    this.hidePreview();
-    this.trackPointer(event);
-    if (card.resolved) {
-      this.spawnEmbers((event.target as HTMLElement).getBoundingClientRect());
-    }
-    const image = card.largeImage;
-    const element = (event.target as HTMLElement).closest('.card');
-    if (!image || !element) {
-      return;
-    }
-    this.hoverTimer = setTimeout(() => {
-      const rect = element.getBoundingClientRect();
-      const height = PREVIEW_WIDTH / CARD_ASPECT;
-      const left =
-        rect.left + rect.width / 2 > window.innerWidth / 2
-          ? rect.left - PREVIEW_GAP - PREVIEW_WIDTH
-          : rect.right + PREVIEW_GAP;
-      const maxTop = window.innerHeight - height - VIEWPORT_MARGIN;
-      const top = Math.max(VIEWPORT_MARGIN, Math.min(this.pointerY - height / 2, maxTop));
-      this.hoverPreview.set({ image, name: card.name, left, top });
-    }, HOVER_DELAY_MS);
-  }
-
-  private spawnEmbers(area: DOMRect): void {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      return;
-    }
-    const includeBottom = area.height > area.width;
-    const random = (min: number, max: number) => min + Math.random() * (max - min);
-    const created = Array.from({ length: EMBER_COUNT }, (): Ember => {
-      const sides = includeBottom ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right'];
-      const side = sides[Math.floor(Math.random() * sides.length)];
-      const base = { id: this.nextEmberId++, size: random(2, 4), delay: random(0, EMBER_MAX_DELAY_MS) };
-      switch (side) {
-        case 'top':
-          return { ...base, x: random(area.left, area.right), y: area.top, dx: random(-8, 8), dy: random(-26, -12) };
-        case 'bottom':
-          return { ...base, x: random(area.left, area.right), y: area.bottom, dx: random(-8, 8), dy: random(-10, -2) };
-        case 'left':
-          return { ...base, x: area.left, y: random(area.top, area.bottom), dx: random(-24, -10), dy: random(-14, 0) };
-        default:
-          return { ...base, x: area.right, y: random(area.top, area.bottom), dx: random(10, 24), dy: random(-14, 0) };
+    effect(() => {
+      const colors = this.colors();
+      if (colors) {
+        this.colorsChange.emit(colors);
       }
     });
-    this.embers.update((embers) => [...embers, ...created]);
-    const ids = new Set(created.map((e) => e.id));
-    setTimeout(
-      () => this.embers.update((embers) => embers.filter((e) => !ids.has(e.id))),
-      EMBER_LIFETIME_MS + EMBER_MAX_DELAY_MS + 50,
-    );
-  }
-
-  protected hidePreview(): void {
-    clearTimeout(this.hoverTimer);
-    this.hoverPreview.set(undefined);
   }
 
   protected open(card: OverviewCard): void {
-    this.hidePreview();
+    this.hoverOverlay.hide();
     this.selected.set(card);
   }
 

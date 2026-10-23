@@ -70,6 +70,7 @@ export const en = {
     viewText: 'Text',
     language: 'Deck language',
     languageAuto: 'Auto ({{language}})',
+    colors: 'Deck colors',
     sortBy: 'Sort by',
     sortCategory: 'Categories',
     sortType: 'Type',

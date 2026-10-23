@@ -8,6 +8,7 @@ export interface Deck {
   name: string;
   text: string;
   language?: string;
+  colors?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +60,15 @@ export class DeckService {
 
   setLanguage(id: string, language: string | undefined): void {
     this.patch(id, { language });
+  }
+
+  // Derived from the resolved cards; stored so the deck list can show colors without loading every deck.
+  setColors(id: string, colors: string[]): void {
+    const deck = this.get(id);
+    if (!deck || deck.colors?.join('') === colors.join('')) {
+      return;
+    }
+    this.state.update((decks) => decks.map((d) => (d.id === id ? { ...d, colors } : d)));
   }
 
   delete(id: string): void {

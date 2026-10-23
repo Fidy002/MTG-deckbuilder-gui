@@ -1,11 +1,3 @@
-@use 'sass:math';
-
-// Card height is 139% of its width. In a stack each card overlaps the previous one by 111% of the width,
-// leaving its title bar plus a strip of art (for the count) visible.
-$card-height-ratio: math.div(680, 488);
-$stack-overlap: 111%;
-$visible-strip: math.percentage(math.div($card-height-ratio - math.div($stack-overlap, 100%), $card-height-ratio));
-
 :host {
   display: flex;
   flex-direction: column;
@@ -59,12 +51,6 @@ h3 {
   }
 }
 
-.filters {
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-
 .stack {
   display: flex;
   flex-direction: column;
@@ -82,66 +68,11 @@ h3 {
   background: var(--color-surface-sunken);
   box-shadow: var(--shadow-card-edge);
   white-space: normal;
-  // Own stacking context: the hover glow of a card stays behind the cards in front of it.
-  isolation: isolate;
-
-  & + & {
-    margin-top: -$stack-overlap;
-  }
-
-  // Only the visible strip reacts to the mouse, so hovering down a stack reaches every card.
+  // Only the hit area of the hover component reacts to the mouse, so hovering down a stack reaches every card.
   pointer-events: none;
 
   &:focus-visible {
     outline: none;
-  }
-
-  .hit-area {
-    position: absolute;
-    inset: 0 0 auto;
-    z-index: 1;
-    height: $visible-strip;
-    pointer-events: auto;
-    cursor: pointer;
-  }
-
-  // Glow behind the card image; percent insets let it grow evenly around the card.
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    pointer-events: none;
-  }
-
-  // The hit area moves against the hop, so the pointer never slips off the card mid-animation.
-  &:not(:disabled):has(.hit-area:hover) {
-    animation: card-hop var(--highlight-pop-duration) ease-out;
-
-    .hit-area {
-      animation: card-hop-steady var(--highlight-pop-duration) ease-out;
-    }
-  }
-
-  &:not(:disabled):has(.hit-area:hover)::after,
-  &:focus-visible::after {
-    inset: calc(-1 * var(--highlight-offset));
-    background: var(--color-highlight);
-    filter: url('#hover-water');
-    animation: highlight-pop var(--highlight-pop-duration) ease-out;
-
-    @media (prefers-reduced-motion: reduce) {
-      filter: url('#hover-water-still');
-    }
-  }
-
-  &:last-child .hit-area {
-    height: 100%;
-  }
-
-  &:disabled .hit-area {
-    cursor: default;
   }
 
   &:disabled {
@@ -211,65 +142,13 @@ h3 {
   }
 }
 
-.hover-preview {
-  position: fixed;
-  z-index: 50;
-  height: auto;
-  aspect-ratio: var(--card-ratio);
-  border-radius: var(--radius-card);
-  filter: var(--shadow-stack);
-  pointer-events: none;
-}
+.mana-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
 
-@keyframes highlight-pop {
-  0% {
-    inset: 0;
-  }
-  50% {
-    inset: calc(-1 * var(--highlight-overshoot));
-  }
-  100% {
-    inset: calc(-1 * var(--highlight-offset));
-  }
-}
-
-@keyframes card-hop {
-  50% {
-    transform: translateY(calc(-1 * var(--card-hop-distance)));
-  }
-}
-
-.embers {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  pointer-events: none;
-}
-
-.ember {
-  position: absolute;
-  width: var(--size);
-  height: var(--size);
-  margin: calc(var(--size) / -2);
-  border-radius: 50%;
-  background: var(--color-highlight);
-  box-shadow: 0 0 var(--ember-glow) color-mix(in srgb, var(--color-highlight) 70%, transparent);
-  opacity: 0;
-  animation: ember-rise var(--ember-duration) ease-out forwards;
-}
-
-@keyframes ember-rise {
-  20% {
-    opacity: 0.95;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(var(--dx), var(--dy)) scale(0.4);
-  }
-}
-
-@keyframes card-hop-steady {
-  50% {
-    transform: translateY(var(--card-hop-distance));
+  img {
+    width: var(--mana-symbol-size);
+    height: var(--mana-symbol-size);
   }
 }

@@ -71,6 +71,7 @@ export const de: Translations = {
     viewText: 'Text',
     language: 'Decksprache',
     languageAuto: 'Auto ({{language}})',
+    colors: 'Deckfarben',
     sortBy: 'Sortieren nach',
     sortCategory: 'Kategorien',
     sortType: 'Typ',

@@ -2,9 +2,10 @@ import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { TranslatePipe } from './i18n/translate.pipe';
 import { LanguageSettings } from './settings/language-settings';
+import { CardHoverOverlayHost } from './shared/card-hover/card-hover-overlay';
 
 @Component({
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe, LanguageSettings],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe, LanguageSettings, CardHoverOverlayHost],
   selector: 'app-root',
   styleUrl: './app.scss',
   templateUrl: './app.html',

@@ -37,7 +37,7 @@
         <dl>
           @if (face.manaCost) {
             <dt class="caps-label">{{ 'card.manaCost' | t }}</dt>
-            <dd>{{ face.manaCost }}</dd>
+            <dd><app-mana-text [text]="face.manaCost" /></dd>
           }
           @if (face.typeLine) {
             <dt class="caps-label">{{ 'card.type' | t }}</dt>
@@ -45,7 +45,7 @@
           }
           @if (face.text) {
             <dt class="caps-label">{{ 'card.text' | t }}</dt>
-            <dd class="text">{{ face.text }}</dd>
+            <dd class="text"><app-mana-text [text]="face.text" /></dd>
           }
         </dl>
       </section>

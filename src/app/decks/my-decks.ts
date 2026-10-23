@@ -3,6 +3,7 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { I18nService, TranslationKey } from '../i18n/i18n.service';
 import { TranslatePipe } from '../i18n/translate.pipe';
 import { cardLanguageName } from '../scryfall/card-languages';
+import { manaSymbolUrl } from '../scryfall/scryfall.models';
 import { LanguageOption, LanguageSelect } from '../settings/language-select';
 import { cardLanguageOptions } from '../settings/language-settings';
 import { DeckSort, SettingsService } from '../settings/settings.service';
@@ -35,6 +36,7 @@ export class MyDecks {
   readonly id = input<string>();
 
   protected readonly view = signal<View>('overview');
+  protected readonly manaSymbolUrl = manaSymbolUrl;
   protected readonly sort = this.settings.deckSort.asReadonly();
   protected readonly sortOptions: { value: DeckSort; label: TranslationKey }[] = [
     { value: 'category', label: 'decks.sortCategory' },
@@ -48,7 +50,10 @@ export class MyDecks {
   private toastTimer?: ReturnType<typeof setTimeout>;
 
   protected readonly decks = computed(() =>
-    this.deckService.decks().map((deck) => ({ ...deck, cardCount: countCards(deck.text) })),
+    this.deckService.decks().map((deck) => {
+      const cardCount = countCards(deck.text);
+      return { ...deck, cardCount, colorSymbols: colorSymbols(deck.colors, cardCount) };
+    }),
   );
 
   protected readonly deck = computed(() => this.decks().find((deck) => deck.id === this.id()));
@@ -97,6 +102,10 @@ export class MyDecks {
     }
   }
 
+  protected setDeckColors(id: string, colors: string[]): void {
+    this.deckService.setColors(id, colors);
+  }
+
   protected setSort(event: Event): void {
     this.settings.deckSort.set((event.target as HTMLSelectElement).value as DeckSort);
   }
@@ -139,4 +148,11 @@ export class MyDecks {
     this.toast.set(toast);
     this.toastTimer = setTimeout(() => this.toast.set(undefined), 3000);
   }
+}
+
+function colorSymbols(colors: string[] | undefined, cardCount: number): string[] | undefined {
+  if (!colors || cardCount === 0) {
+    return undefined;
+  }
+  return colors.length ? colors : ['C'];
 }
