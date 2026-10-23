@@ -1,0 +1,117 @@
+:host {
+  display: block;
+}
+
+.status {
+  color: var(--text-muted);
+
+  &.error {
+    color: var(--error-text);
+  }
+}
+
+.notice {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+
+  &.subtle {
+    background: var(--surface-2);
+    color: var(--text-muted);
+  }
+}
+
+.groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 1.5rem 1rem;
+  align-items: start;
+}
+
+h3 {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+
+  .count {
+    color: var(--text-muted);
+  }
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.card {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 4.75% / 3.5%;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: 0 -2px 6px rgb(0 0 0 / 0.45);
+  cursor: pointer;
+  transition: transform 120ms ease;
+
+  // Card height is 139% of its width; leave ~21% of the width (the title bar) visible.
+  & + & {
+    margin-top: -118%;
+  }
+
+  &:hover,
+  &:focus-visible {
+    z-index: 5;
+    transform: translateY(-4px);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 1;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 488 / 680;
+  }
+}
+
+.placeholder {
+  display: block;
+  aspect-ratio: 488 / 680;
+  padding: 0.6rem;
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--text);
+  border: 1px dashed var(--border);
+  border-radius: inherit;
+}
+
+.badges {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.badge {
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgb(0 0 0 / 0.8);
+
+  &.lang {
+    font-size: 0.7rem;
+    background: var(--warning-bg);
+    color: var(--warning-text);
+  }
+}

@@ -1,0 +1,55 @@
+@if (state().status === 'loading') {
+  <p class="status">{{ 'overview.loading' | t }}</p>
+}
+@if (state().status === 'error') {
+  <p class="status error">{{ 'search.error' | t }}</p>
+}
+@if (notFound().length) {
+  <p class="notice">{{ 'overview.notFound' | t: { names: notFound().join(', ') } }}</p>
+}
+@if (fallbackCount()) {
+  <p class="notice subtle">{{ 'overview.fallback' | t: { count: fallbackCount(), language: languageName() } }}</p>
+}
+
+@if (groups().length === 0 && state().status === 'done') {
+  <p class="status">{{ 'overview.empty' | t }}</p>
+}
+
+<div class="groups">
+  @for (group of groups(); track group.id) {
+    <section class="group">
+      <h3>
+        {{ group.title | t }} <span class="count">{{ group.count }}</span>
+      </h3>
+      <div class="stack">
+        @for (card of group.cards; track $index) {
+          <button
+            type="button"
+            class="card"
+            [title]="card.name"
+            [disabled]="!card.resolved"
+            (click)="selectedCard.set(card.resolved?.card)"
+          >
+            @if (card.image) {
+              <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" />
+            } @else {
+              <span class="placeholder">{{ card.name }}</span>
+            }
+            <span class="badges">
+              @if (card.resolved && !card.resolved.localized) {
+                <span class="badge lang" [title]="'overview.notLocalized' | t: { language: languageName() }">EN</span>
+              }
+              @if (card.entry.count > 1) {
+                <span class="badge">{{ card.entry.count }}×</span>
+              }
+            </span>
+          </button>
+        }
+      </div>
+    </section>
+  }
+</div>
+
+@if (selectedCard(); as card) {
+  <app-card-preview [card]="card" (closed)="selectedCard.set(undefined)" />
+}

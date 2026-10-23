@@ -1,0 +1,106 @@
+<aside>
+  <button type="button" class="new" (click)="create()">+ {{ 'decks.new' | t }}</button>
+  <button type="button" class="new" (click)="importMode.set('new')">⤓ {{ 'import.newDeck' | t }}</button>
+
+  @if (decks().length) {
+    <ul>
+      @for (item of decks(); track item.id) {
+        <li>
+          <a [routerLink]="['/decks', item.id]" routerLinkActive="active">
+            <span class="name">{{ item.name.trim() || ('decks.untitled' | t) }}</span>
+            <small>{{ 'decks.cardCount' | t: { count: item.cardCount } }}</small>
+          </a>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="muted">{{ 'decks.empty' | t }}</p>
+  }
+</aside>
+
+<section class="editor">
+  @if (deck(); as deck) {
+    <label class="field">
+      <span>{{ 'decks.name' | t }}</span>
+      <input
+        type="text"
+        class="name-input"
+        [value]="deck.name"
+        (input)="rename(deck.id, $event)"
+        [placeholder]="'decks.untitled' | t"
+      />
+    </label>
+
+    <div class="toolbar">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" [class.active]="view() === 'overview'" [attr.aria-selected]="view() === 'overview'" (click)="view.set('overview')">
+          {{ 'decks.viewOverview' | t }}
+        </button>
+        <button type="button" role="tab" [class.active]="view() === 'text'" [attr.aria-selected]="view() === 'text'" (click)="view.set('text')">
+          {{ 'decks.viewText' | t }}
+        </button>
+      </div>
+
+      <span class="spacer"></span>
+
+      <button type="button" (click)="importMode.set('replace')">⤓ {{ 'import.button' | t }}</button>
+
+      <div class="export">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          [attr.aria-expanded]="exportMenuOpen()"
+          [disabled]="entries().length === 0"
+          (click)="exportMenuOpen.set(!exportMenuOpen())"
+        >
+          ⤒ {{ 'export.button' | t }} ▾
+        </button>
+        @if (exportMenuOpen()) {
+          <div class="menu" role="menu">
+            <p class="menu-hint">{{ 'export.hint' | t }}</p>
+            @for (format of exportFormats; track format.id) {
+              <button type="button" role="menuitem" (click)="export(format)">{{ format.label }}</button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    @if (toast(); as toast) {
+      <p class="toast" [class.error]="toast.error" role="status">{{ toast.key | t: { format: toast.format ?? '' } }}</p>
+    }
+
+    @if (view() === 'overview') {
+      <app-deck-overview [entries]="entries()" />
+    } @else {
+      <label class="field list">
+        <span>{{ 'decks.list' | t }}</span>
+        <textarea
+          spellcheck="false"
+          [value]="deck.text"
+          (input)="updateText(deck.id, $event)"
+          [placeholder]="'decks.listPlaceholder' | t"
+        ></textarea>
+      </label>
+    }
+
+    <footer>
+      <span class="muted">
+        {{ 'decks.cardCount' | t: { count: deck.cardCount } }}
+        @if (sideboardCount()) {
+          · {{ 'decks.sideboardCount' | t: { count: sideboardCount() } }}
+        }
+        · {{ 'decks.updated' | t: { date: updatedAt() } }}
+      </span>
+      <button type="button" class="delete" (click)="delete(deck.id, deck.name)">{{ 'decks.delete' | t }}</button>
+    </footer>
+  } @else if (id()) {
+    <p class="muted">{{ 'decks.notFound' | t }}</p>
+  } @else {
+    <p class="muted">{{ 'decks.select' | t }}</p>
+  }
+</section>
+
+@if (importMode(); as mode) {
+  <app-import-dialog [replacesDeck]="mode === 'replace'" (imported)="onImported($event)" (closed)="importMode.set(undefined)" />
+}

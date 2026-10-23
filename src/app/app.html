@@ -1,0 +1,15 @@
+<header>
+  <div class="brand">
+    <h1>{{ 'app.title' | t }}</h1>
+    <small>{{ 'app.subtitle' | t }}</small>
+  </div>
+  <nav>
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">{{ 'nav.search' | t }}</a>
+    <a routerLink="/decks" routerLinkActive="active">{{ 'nav.decks' | t }}</a>
+  </nav>
+  <app-language-settings />
+</header>
+
+<main>
+  <router-outlet />
+</main>

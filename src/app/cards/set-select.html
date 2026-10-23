@@ -1,0 +1,57 @@
+<span class="label">{{ 'sets.label' | t }}</span>
+
+<button
+  type="button"
+  class="trigger"
+  aria-haspopup="listbox"
+  [attr.aria-expanded]="open()"
+  [class.active]="selected().length > 0"
+  (click)="open.set(!open())"
+>
+  <span class="summary">{{ summary() }}</span>
+  <span aria-hidden="true">▾</span>
+</button>
+
+@if (open()) {
+  <div class="panel">
+    <div class="toolbar">
+      <input
+        #filterInput
+        type="search"
+        autocomplete="off"
+        [value]="filter()"
+        (input)="onFilterInput($event)"
+        [placeholder]="'sets.filter' | t"
+        [attr.aria-label]="'sets.filter' | t"
+      />
+      @if (selected().length) {
+        <button type="button" class="clear" (click)="clear()">{{ 'sets.clear' | t }}</button>
+      }
+    </div>
+
+    @switch (state().status) {
+      @case ('loading') {
+        <p class="status">{{ 'sets.loading' | t }}</p>
+      }
+      @case ('error') {
+        <p class="status error">{{ 'sets.error' | t }}</p>
+      }
+      @case ('done') {
+        <ul role="listbox" aria-multiselectable="true" [attr.aria-label]="'sets.label' | t">
+          @for (set of visibleSets(); track set.code) {
+            <li role="option" [attr.aria-selected]="isSelected(set.code)">
+              <label>
+                <input type="checkbox" [checked]="isSelected(set.code)" (change)="toggleSet(set.code)" />
+                <img [src]="set.icon_svg_uri" alt="" width="18" height="18" loading="lazy" />
+                <span class="name">{{ set.name }}</span>
+                <span class="meta">{{ set.code.toUpperCase() }} · {{ set.released_at?.slice(0, 4) }}</span>
+              </label>
+            </li>
+          } @empty {
+            <li class="status">{{ 'sets.noMatch' | t }}</li>
+          }
+        </ul>
+      }
+    }
+  </div>
+}

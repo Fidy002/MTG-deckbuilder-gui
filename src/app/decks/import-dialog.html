@@ -1,0 +1,35 @@
+<div class="backdrop" (click)="closed.emit()"></div>
+
+<div class="dialog" role="dialog" aria-modal="true" [attr.aria-label]="'import.title' | t">
+  <h2>{{ 'import.title' | t }}</h2>
+  <p class="muted">{{ 'import.formats' | t }}</p>
+
+  <textarea
+    spellcheck="false"
+    [value]="text()"
+    (input)="onInput($event)"
+    [placeholder]="'import.placeholder' | t"
+    [disabled]="busy()"
+  ></textarea>
+
+  @switch (error()) {
+    @case ('empty') {
+      <p class="error">{{ 'import.empty' | t }}</p>
+    }
+    @case ('clipboard') {
+      <p class="error">{{ 'import.clipboardError' | t }}</p>
+    }
+  }
+  @if (replacesDeck()) {
+    <p class="muted">{{ 'import.replaceHint' | t }}</p>
+  }
+
+  <footer>
+    <button type="button" (click)="pasteFromClipboard()" [disabled]="busy()">📋 {{ 'import.paste' | t }}</button>
+    <span class="spacer"></span>
+    <button type="button" (click)="closed.emit()">{{ 'import.cancel' | t }}</button>
+    <button type="button" class="primary" (click)="import()" [disabled]="busy() || !text().trim()">
+      {{ (busy() ? 'import.busy' : 'import.submit') | t }}
+    </button>
+  </footer>
+</div>

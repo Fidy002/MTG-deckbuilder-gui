@@ -1,0 +1,53 @@
+<div class="filters">
+  <label class="search">
+    <span>{{ 'search.label' | t }}</span>
+    <input
+      type="search"
+      autocomplete="off"
+      [value]="query()"
+      (input)="onInput($event)"
+      [placeholder]="'search.placeholder' | t"
+    />
+  </label>
+  <app-set-select class="sets" [(selected)]="selectedSets" />
+</div>
+
+@switch (state().status) {
+  @case ('idle') {
+    <p class="status">{{ 'search.hint' | t: { min: minQueryLength } }}</p>
+  }
+  @case ('loading') {
+    <p class="status">{{ 'search.loading' | t }}</p>
+  }
+  @case ('error') {
+    <p class="status error">{{ 'search.error' | t }}</p>
+  }
+}
+
+@if (result(); as result) {
+  @if (fallbackLanguage(); as language) {
+    <p class="notice">{{ 'search.fallback' | t: { language } }}</p>
+  }
+
+  @if (result.cards.length === 0) {
+    <p class="status">{{ 'search.noResults' | t }}</p>
+  } @else {
+    <p class="status">{{ 'search.resultCount' | t: { count: result.totalCards } }}</p>
+
+    <div class="grid">
+      @for (card of result.cards; track card.id) {
+        <app-card-tile [card]="card" (selected)="selectedCard.set($event)" />
+      }
+    </div>
+
+    @if (result.nextPage) {
+      <button type="button" class="load-more" (click)="loadMore()" [disabled]="loadingMore()">
+        {{ (loadingMore() ? 'search.loading' : 'search.loadMore') | t }}
+      </button>
+    }
+  }
+}
+
+@if (selectedCard(); as card) {
+  <app-card-preview [card]="card" (closed)="selectedCard.set(undefined)" />
+}

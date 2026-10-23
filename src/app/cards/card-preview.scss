@@ -1,0 +1,127 @@
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.75);
+}
+
+.dialog {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 400px) minmax(0, 360px);
+  gap: 1.5rem;
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1.5rem;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.6);
+
+  @media (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.image {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+
+  img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 672 / 936;
+    border-radius: 4.75% / 3.5%;
+    background: var(--surface-2);
+  }
+}
+
+.placeholder {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 672 / 936;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.flip {
+  align-self: center;
+}
+
+.details {
+  h2 {
+    margin: 0 2rem 0.75rem 0;
+  }
+
+  h3 {
+    margin: 1rem 0 0.5rem;
+    font-size: 1rem;
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 1rem;
+    margin: 0 0 1rem;
+  }
+
+  dt {
+    color: var(--text-muted);
+  }
+
+  dd {
+    margin: 0;
+  }
+
+  .text {
+    white-space: pre-line;
+  }
+}
+
+.add-to-deck {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+
+  select {
+    flex: 1 1 140px;
+    min-width: 0;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .added {
+    flex-basis: 100%;
+    font-size: 0.85rem;
+    color: var(--accent);
+  }
+}
+
+.notice {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}

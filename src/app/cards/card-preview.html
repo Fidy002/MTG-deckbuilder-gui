@@ -1,0 +1,75 @@
+<div class="backdrop" (click)="closed.emit()"></div>
+
+<div class="dialog" role="dialog" aria-modal="true" [attr.aria-label]="name()">
+  <button type="button" class="close" (click)="closed.emit()" [attr.aria-label]="'card.close' | t">✕</button>
+
+  <div class="image">
+    @if (image(); as src) {
+      <img [src]="src" [alt]="name()" />
+    } @else {
+      <div class="placeholder">{{ 'card.noImage' | t }}</div>
+    }
+    @if (canFlip()) {
+      <button type="button" class="flip" (click)="flip()">⟲ {{ 'card.flip' | t }}</button>
+    }
+  </div>
+
+  <div class="details">
+    <h2>{{ name() }}</h2>
+
+    @if (missingLanguage(); as language) {
+      <p class="notice">{{ 'card.notAvailableInLanguage' | t: { language } }}</p>
+    }
+
+    @for (face of faces(); track $index) {
+      <section>
+        @if (faces().length > 1) {
+          <h3>{{ face.name }}</h3>
+        }
+        <dl>
+          @if (face.manaCost) {
+            <dt>{{ 'card.manaCost' | t }}</dt>
+            <dd>{{ face.manaCost }}</dd>
+          }
+          @if (face.typeLine) {
+            <dt>{{ 'card.type' | t }}</dt>
+            <dd>{{ face.typeLine }}</dd>
+          }
+          @if (face.text) {
+            <dt>{{ 'card.text' | t }}</dt>
+            <dd class="text">{{ face.text }}</dd>
+          }
+        </dl>
+      </section>
+    }
+
+    <dl>
+      <dt>{{ 'card.set' | t }}</dt>
+      <dd>{{ shown().set_name }} ({{ shown().set.toUpperCase() }})</dd>
+      <dt>{{ 'card.collectorNumber' | t }}</dt>
+      <dd>{{ shown().collector_number }}</dd>
+      <dt>{{ 'card.rarity' | t }}</dt>
+      <dd>{{ rarityKey() | t }}</dd>
+    </dl>
+
+    <div class="add-to-deck">
+      @if (decks().length) {
+        <select [attr.aria-label]="'card.targetDeck' | t" (change)="targetDeckId.set(selectValue($event))">
+          @for (deck of decks(); track deck.id) {
+            <option [value]="deck.id" [selected]="deck.id === targetDeckId()">
+              {{ deck.name.trim() || ('decks.untitled' | t) }}
+            </option>
+          }
+        </select>
+      }
+      <button type="button" (click)="addToDeck()">
+        + {{ (decks().length ? 'card.addToDeck' : 'card.addToNewDeck') | t }}
+      </button>
+      @if (addedTo(); as deck) {
+        <span class="added" role="status">✓ {{ 'card.added' | t: { deck } }}</span>
+      }
+    </div>
+
+    <a [href]="shown().scryfall_uri" target="_blank" rel="noopener">{{ 'card.openOnScryfall' | t }} ↗</a>
+  </div>
+</div>
