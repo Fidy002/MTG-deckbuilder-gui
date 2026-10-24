@@ -126,6 +126,27 @@ h3 {
 .counter {
   border: var(--line-width) solid var(--color-accent);
   color: var(--color-text);
+
+  // Too many copies: larger badge with the red water glow of marked cards around it.
+  &.too-many {
+    position: relative;
+    isolation: isolate;
+    padding: 0 var(--space-2);
+    border-color: #000;
+    background: var(--color-illegal-glow);
+    font-size: var(--text-sm);
+    color: #fff;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      z-index: -1;
+      border-radius: var(--radius-md);
+      background: var(--color-illegal-glow);
+      filter: url('#hover-water-still');
+    }
+  }
 }
 
 .lang-tag {
@@ -196,12 +217,180 @@ h3 {
   }
 }
 
+.warning-triangle {
+  display: block;
+  flex: none;
+  width: var(--legal-tag-size);
+  height: var(--legal-tag-size);
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.7));
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .warning-fill {
+    fill: var(--color-illegal-glow);
+    stroke: #000;
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+  }
+
+  .warning-mark {
+    fill: none;
+    stroke: #000;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+  }
+}
+
 .legal-tag {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1;
+  transform: translate(-50%, -55%);
+}
+
+.heading-warning {
+  align-self: center;
+  width: var(--heading-warning-size);
+  height: var(--heading-warning-size);
+  margin-right: auto;
+
+  .mana-heading & {
+    margin-right: 0;
+  }
+}
+
+// The top margin equals a group heading (line, padding, border, gap), so the frame starts level with the card tops.
+.commander-zone {
+  grid-column: span var(--slots);
+  margin-top: calc(var(--text-md) * 1.5 + var(--space-1) + var(--line-width) + var(--space-3));
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: radial-gradient(ellipse at top, rgb(184 150 79 / 0.12), transparent 70%), var(--color-surface);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+
+  @media (max-width: 760px) {
+    grid-column: 1 / -1;
+  }
+}
+
+.zone-title {
+  justify-content: center;
+  border-bottom-color: var(--color-accent);
+  color: var(--color-accent-strong);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.zone-cards {
   display: grid;
-  place-items: center;
-  padding: 1px;
-  border: var(--line-width) solid var(--color-danger);
-  border-radius: var(--radius-sm);
-  background: var(--color-counter-fill);
-  color: var(--color-danger);
+  grid-template-columns: repeat(var(--slots), minmax(0, 1fr));
+  gap: var(--space-4);
+  filter: var(--shadow-stack);
+}
+
+.zone-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.zone-card {
+  pointer-events: auto;
+}
+
+.zone-label {
+  color: var(--color-accent);
+}
+
+.open-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: auto;
+  aspect-ratio: var(--card-ratio);
+  padding: var(--space-3);
+  border: 2px dashed var(--color-line-strong);
+  border-radius: var(--radius-card);
+  background: rgb(184 150 79 / 0.05);
+  color: var(--color-accent);
+  white-space: normal;
+  text-align: center;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+
+  .icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  &:hover {
+    border-color: var(--color-accent);
+    background: rgb(184 150 79 / 0.12);
+  }
+}
+
+.picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgb(0 0 0 / 0.7);
+}
+
+.picker {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(960px, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100vh - 2 * var(--space-6));
+  padding: var(--space-5);
+  border-color: var(--color-accent);
+  transform: translate(-50%, -50%);
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: var(--text-xl);
+  }
+
+  .status {
+    margin: 0;
+  }
+}
+
+.picker-close {
+  width: var(--control-height);
+  padding: 0;
+  border-color: transparent;
+}
+
+.picker-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--stack-width), 1fr));
+  gap: var(--space-5);
+  padding: var(--space-3);
+  overflow: auto;
+
+  .card {
+    pointer-events: auto;
+  }
 }

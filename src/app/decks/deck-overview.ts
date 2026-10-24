@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, input, linkedSignal, output, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, debounce, map, of, startWith, switchMap, timer } from 'rxjs';
@@ -10,7 +11,7 @@ import { DeckSort } from '../settings/settings.service';
 import { CardHover } from '../shared/card-hover/card-hover';
 import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.service';
 import { AUTO_CATEGORIES, autoCategory } from './auto-categories';
-import { LegalityIssue, LegalityResult, checkCommanderLegality, legalityIssueKey, legalityIssueParams } from './commander-legality';
+import { LegalityIssue, LegalityResult, allowsSecondCommander, canBeCommander, canPair, checkLegality, isCopyIssue, legalityIssueKey, legalityIssueParams } from './deck-legality';
 import { DeckCardsService, ResolvedCard, cardKey } from './deck-cards.service';
 import { DeckGroupId, deckGroupName, manaValueGroupName } from './deck-group-names';
 import { DeckService, EntryChanges } from './deck.service';
@@ -57,7 +58,8 @@ type ResolveState =
 
 @Component({
   selector: 'app-deck-overview',
-  imports: [TranslatePipe, CardPreview, CardHover],
+  imports: [NgTemplateOutlet, TranslatePipe, CardPreview, CardHover],
+  host: { '(document:keydown.escape)': 'picking.set(false)' },
   templateUrl: './deck-overview.html',
   styleUrl: './deck-overview.scss',
 })
@@ -70,7 +72,10 @@ export class DeckOverview {
   readonly language = input.required<string>();
   readonly deckId = input.required<string>();
   readonly sort = input.required<DeckSort>();
-  readonly legalityCheck = input(false);
+  // Scryfall legality key of the format to check against; undefined turns the check off.
+  readonly legalityFormat = input<string>();
+  // Commander decks show commanders and companion in their own framed zone in front of all groups.
+  readonly commanderZone = input(false);
   readonly colorsChange = output<string[]>();
   readonly legalityChange = output<LegalityResult | undefined>();
 
@@ -124,9 +129,9 @@ export class DeckOverview {
     return language !== this.language() || deckId !== this.deckId();
   });
 
-  protected readonly groups = computed(() => {
+  private readonly cards = computed(() => {
     const resolved = this.resolved();
-    const cards = this.entries().map((entry): OverviewCard => {
+    return this.entries().map((entry): OverviewCard => {
       const result = resolved.get(cardKey(entry));
       return {
         key: cardKey(entry),
@@ -137,7 +142,10 @@ export class DeckOverview {
         largeImage: result ? cardFaces(result.card)[0]?.image?.large : undefined,
       };
     });
+  });
 
+  protected readonly groups = computed(() => {
+    const cards = this.cards();
     const language = this.language();
     const groups: OverviewGroup[] = [];
     const add = (id: string, title: string, groupCards: OverviewCard[], extra: Partial<OverviewGroup> = {}) => {
@@ -153,8 +161,10 @@ export class DeckOverview {
     };
     const inSection = (section: DeckSection) => cards.filter((c) => c.entry.section === section);
 
-    addFixed('commander', inSection('commander'));
-    addFixed('companion', inSection('companion'));
+    if (!this.commanderZone()) {
+      addFixed('commander', inSection('commander'));
+      addFixed('companion', inSection('companion'));
+    }
     const main = inSection('main');
     switch (this.sort()) {
       case 'category': {
@@ -189,6 +199,42 @@ export class DeckOverview {
     addFixed('maybeboard', inSection('maybeboard'));
     return groups;
   });
+
+  protected readonly zone = computed(() => {
+    if (!this.commanderZone()) {
+      return undefined;
+    }
+    const cards = this.cards();
+    const commanders = cards.filter((c) => c.entry.section === 'commander');
+    const first = commanders[0]?.resolved?.card;
+    const language = this.language();
+    return {
+      title: deckGroupName('commander', language),
+      companionTitle: deckGroupName('companion', language),
+      commanders,
+      companions: cards.filter((c) => c.entry.section === 'companion'),
+      openSlot: commanders.length === 0 ? ('commander' as const) : commanders.length === 1 && first && allowsSecondCommander(first) ? ('partner' as const) : undefined,
+    };
+  });
+
+  protected readonly picking = signal(false);
+
+  protected readonly candidates = computed(() => {
+    const partnerOf = this.zone()?.commanders[0]?.resolved?.card;
+    return this.cards().filter((c) => {
+      const card = c.resolved?.card;
+      if (c.entry.section !== 'main' || !card) {
+        return false;
+      }
+      return partnerOf ? canPair(partnerOf, card) && canBeCommander(card, true) : canBeCommander(card, false);
+    });
+  });
+
+  protected pickCommander(card: OverviewCard): void {
+    this.hoverOverlay.hide();
+    this.deckService.updateEntry(this.deckId(), card.entry, { section: 'commander' });
+    this.picking.set(false);
+  }
 
   protected readonly categories = computed(() => {
     const language = this.language();
@@ -253,17 +299,38 @@ export class DeckOverview {
   }
 
   protected readonly legality = computed(() => {
-    if (!this.legalityCheck() || this.pending()) {
+    const format = this.legalityFormat();
+    if (!format || this.pending()) {
       return undefined;
     }
     const resolved = this.resolved();
-    return checkCommanderLegality(
+    return checkLegality(
+      format,
       this.entries().map((entry) => ({ key: cardKey(entry), entry, card: resolved.get(cardKey(entry))?.card ?? undefined })),
     );
   });
 
+  // Too many copies only colors the count badge; every other issue marks the whole card.
+  protected hasCopyIssue(key: string): boolean {
+    return !!this.legality()?.cardIssues.get(key)?.some(isCopyIssue);
+  }
+
+  protected groupHasIssues(group: OverviewGroup): boolean {
+    const issues = this.legality()?.cardIssues;
+    return !!issues && group.cards.some((card) => issues.has(card.key));
+  }
+
+  protected hasCardIssue(key: string): boolean {
+    return !!this.legality()?.cardIssues.get(key)?.some((issue) => !isCopyIssue(issue));
+  }
+
+  protected cardWarning(key: string): string | undefined {
+    const issues = this.legality()?.cardIssues.get(key);
+    return issues && this.issueTitle(issues);
+  }
+
   protected issueTitle(issues: readonly LegalityIssue[]): string {
-    return issues.map((issue) => this.i18n.translate(legalityIssueKey(issue), legalityIssueParams(issue))).join('\n');
+    return issues.map((issue) => this.i18n.translate(legalityIssueKey(issue), legalityIssueParams(issue, this.legalityFormat() ?? ''))).join('\n');
   }
 
   protected readonly notFound = computed(() => {

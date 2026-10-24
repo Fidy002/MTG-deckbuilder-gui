@@ -107,6 +107,22 @@
       </div>
 
       <div class="toolbar-actions">
+      @if (deckFormat() !== 'commander') {
+        <label class="sort">
+          <span class="caps-label">{{ 'decks.legalityFormat' | t }}</span>
+          <select (change)="setLegalityFormat(deck.id, $event)">
+            @for (option of constructedFormats; track option.id) {
+              <option [value]="option.id" [selected]="option.id === legalityFormat()">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <label class="legality-toggle">
+        <input type="checkbox" role="switch" [checked]="legalityCheck()" (change)="toggleLegality($event)" />
+        <span>{{ 'decks.legalityToggle' | t }}</span>
+      </label>
+
       <label class="sort">
         <span class="caps-label">{{ 'decks.format' | t }}</span>
         <select (change)="setFormat(deck.id, $event)">
@@ -115,13 +131,6 @@
           }
         </select>
       </label>
-
-      @if (deckFormat() === 'commander') {
-        <label class="legality-toggle">
-          <input type="checkbox" role="switch" [checked]="legalityCheck()" (change)="toggleLegality($event)" />
-          <span>{{ 'decks.legalityToggle' | t }}</span>
-        </label>
-      }
 
       @if (view() === 'overview') {
         <label class="sort">
@@ -147,23 +156,32 @@
       </p>
     }
 
-    @if (legality(); as legality) {
+    @if (view() === 'overview' && legality(); as legality) {
       <section class="legality" [class.ok]="!legality.issues.length" aria-live="polite">
         <p class="legality-title">
           @if (legality.issues.length) {
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z" /><path d="M12 10v5M12 18h.01" /></svg>
-            {{ 'legality.title' | t }} · {{ 'legality.problems' | t: { count: legality.issues.length } }}
+            {{ 'legality.title' | t: { format: formatLabel(legality.format) } }} · {{ 'legality.problems' | t: { count: legality.issues.length } }}
           } @else {
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
-            {{ 'legality.title' | t }} · {{ 'legality.ok' | t }}
+            {{ 'legality.title' | t: { format: formatLabel(legality.format) } }} · {{ 'legality.ok' | t }}
           }
         </p>
         @if (legality.issues.length) {
           <ul>
             @for (issue of legality.issues; track $index) {
-              <li>{{ issueKey(issue) | t: issueParams(issue) }}</li>
+              <li>{{ issueKey(issue) | t: issueParams(issue, legality.format) }}</li>
             }
           </ul>
+          @if (canFix(legality.issues, 'all')) {
+            <div class="legality-actions">
+              @for (option of legalityFixes; track option.fix) {
+                <button type="button" [disabled]="!canFix(legality.issues, option.fix)" (click)="fixLegality(deck.id, legality.issues, option.fix)">
+                  {{ option.label | t }}
+                </button>
+              }
+            </div>
+          }
         }
       </section>
     }
@@ -189,7 +207,8 @@
         [language]="deckLanguage()"
         [deckId]="deck.id"
         [sort]="sort()"
-        [legalityCheck]="deckFormat() === 'commander' && legalityCheck()"
+        [legalityFormat]="legalityCheck() ? legalityFormat() : undefined"
+        [commanderZone]="deckFormat() === 'commander'"
         (colorsChange)="setDeckColors(deck.id, $event)"
         (legalityChange)="legality.set($event)"
       />

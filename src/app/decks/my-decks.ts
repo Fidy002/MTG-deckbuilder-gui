@@ -11,10 +11,10 @@ import { cardLanguageOptions } from '../settings/language-settings';
 import { DeckSort, SettingsService } from '../settings/settings.service';
 import { DECK_EXPORT_FORMATS, DeckExportFormat } from './deck-formats';
 import { DeckOverview } from './deck-overview';
-import { LegalityResult, legalityIssueKey, legalityIssueParams } from './commander-legality';
+import { CONSTRUCTED_FORMATS, LegalityFix, LegalityIssue, applyLegalityFix, canFix, LegalityResult, legalityFormatLabel, legalityIssueKey, legalityIssueParams } from './deck-legality';
 import { DeckCardsService, cardKey } from './deck-cards.service';
 import { DeckService, countCards } from './deck.service';
-import { DeckFormat, countEntries, detectFormat, parseDecklist } from './decklist';
+import { DeckFormat, countEntries, detectFormat, parseDecklist, serializeDecklist } from './decklist';
 import { ImportDialog } from './import-dialog';
 
 type View = 'overview' | 'text';
@@ -67,6 +67,7 @@ export class MyDecks {
     { value: 'type', label: 'decks.sortType' },
     { value: 'mana', label: 'decks.sortMana' },
   ];
+  protected readonly constructedFormats = CONSTRUCTED_FORMATS;
   protected readonly exportFormats = DECK_EXPORT_FORMATS;
   protected readonly exportMenuOpen = signal(false);
   protected readonly importMode = signal<'new' | 'replace' | undefined>(undefined);
@@ -74,7 +75,13 @@ export class MyDecks {
   protected readonly addCardsOpen = signal(false);
   protected readonly legality = signal<LegalityResult | undefined>(undefined);
   protected readonly issueKey = legalityIssueKey;
-  protected readonly issueParams = legalityIssueParams;
+  protected readonly formatLabel = legalityFormatLabel;
+  protected readonly canFix = canFix;
+  protected readonly legalityFixes: { fix: LegalityFix; label: TranslationKey }[] = [
+    { fix: 'copies', label: 'legality.fixCopies' },
+    { fix: 'illegal', label: 'legality.fixIllegal' },
+    { fix: 'all', label: 'legality.fixAll' },
+  ];
   protected readonly addCardsUsed = signal(false);
   private toastTimer?: ReturnType<typeof setTimeout>;
 
@@ -98,6 +105,9 @@ export class MyDecks {
   protected readonly entries = computed(() => parseDecklist(this.deck()?.text ?? ''));
   // Decks saved before formats existed fall back to the detection used on import.
   protected readonly deckFormat = computed(() => this.deck()?.format ?? detectFormat(this.entries()));
+  protected readonly legalityFormat = computed(() =>
+    this.deckFormat() === 'commander' ? 'commander' : (this.deck()?.legalityFormat ?? CONSTRUCTED_FORMATS[0].id),
+  );
   protected readonly sideboardCount = computed(() => countEntries(this.entries(), ['sideboard']));
 
   protected readonly deckLanguage = computed(() => this.deck()?.language ?? this.settings.cardLanguage());
@@ -185,6 +195,22 @@ export class MyDecks {
 
   protected setFormat(id: string, event: Event): void {
     this.deckService.setFormat(id, (event.target as HTMLSelectElement).value as DeckFormat);
+  }
+
+  protected setLegalityFormat(id: string, event: Event): void {
+    this.deckService.setLegalityFormat(id, (event.target as HTMLSelectElement).value);
+  }
+
+  protected issueParams(issue: LegalityIssue, format: string) {
+    return legalityIssueParams(issue, format);
+  }
+
+  protected fixLegality(id: string, issues: readonly LegalityIssue[], fix: LegalityFix): void {
+    const { entries, removed } = applyLegalityFix(this.entries(), issues, fix);
+    if (removed) {
+      this.deckService.updateText(id, serializeDecklist(entries));
+      this.showToast({ key: 'legality.fixed', params: { count: removed } });
+    }
   }
 
   protected toggleLegality(event: Event): void {

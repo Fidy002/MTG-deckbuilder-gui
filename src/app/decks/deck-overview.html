@@ -27,6 +27,26 @@
 </div>
 
 <div class="groups" [class.hidden]="pending()">
+  @if (zone(); as zone) {
+    <section class="commander-zone" [style.--slots]="zone.commanders.length + zone.companions.length + (zone.openSlot ? 1 : 0)">
+      <h3 class="zone-title">{{ zone.title }}</h3>
+      <div class="zone-cards">
+        @for (card of zone.commanders; track card.key) {
+          <ng-container *ngTemplateOutlet="zoneCard; context: { $implicit: card, label: zone.commanders.length > 1 && !$first ? 'Partner' : '' }" />
+        }
+        @if (zone.openSlot; as slot) {
+          <button type="button" class="open-slot" (click)="picking.set(true)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            <span>{{ (slot === 'commander' ? 'overview.chooseCommander' : 'overview.choosePartner') | t }}</span>
+          </button>
+        }
+        @for (card of zone.companions; track card.key) {
+          <ng-container *ngTemplateOutlet="zoneCard; context: { $implicit: card, label: zone.companionTitle }" />
+        }
+      </div>
+    </section>
+  }
+
   @for (group of groups(); track group.id) {
     <section class="group">
       <h3 [class.mana-heading]="!!group.manaValue">
@@ -39,6 +59,9 @@
           </span>
         } @else {
           <span>{{ group.title }}</span>
+        }
+        @if (groupHasIssues(group)) {
+          <ng-container *ngTemplateOutlet="warningTriangle; context: { $implicit: 'heading-warning' }" />
         }
         <span class="count">{{ group.count }}</span>
       </h3>
@@ -58,6 +81,8 @@
               [previewImage]="card.largeImage"
               [hitHeight]="$last ? '100%' : visibleStrip"
               [disabled]="!card.resolved"
+              [marked]="hasCardIssue(card.key)"
+              [warning]="cardWarning(card.key)"
             >
               @if (card.image) {
                 <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" />
@@ -65,16 +90,14 @@
                 <span class="card-placeholder">{{ card.name }}</span>
               }
               <span class="badges">
-                <span class="counter">x{{ card.entry.count }}</span>
+                <span class="counter" [class.too-many]="hasCopyIssue(card.key)">x{{ card.entry.count }}</span>
                 @if (card.resolved && !card.resolved.localized) {
                   <span class="lang-tag" [title]="'overview.notLocalized' | t: { language: languageName() }">EN</span>
                 }
-                @if (legality()?.cardIssues?.get(card.key); as issues) {
-                  <span class="legal-tag" [title]="issueTitle(issues)">
-                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z" /><path d="M12 10v5M12 18h.01" /></svg>
-                  </span>
-                }
               </span>
+              @if (hasCardIssue(card.key)) {
+                <ng-container *ngTemplateOutlet="warningTriangle; context: { $implicit: 'legal-tag' }" />
+              }
             </app-card-hover>
           </button>
         }
@@ -123,4 +146,64 @@
       </div>
     </app-card-preview>
   }
+}
+
+<ng-template #warningTriangle let-className>
+  <span [class]="className + ' warning-triangle'">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path class="warning-fill" d="M12 2.5 1.5 21h21L12 2.5z" />
+      <path class="warning-mark" d="M12 9.5v5.5M12 17.6v.1" />
+    </svg>
+  </span>
+</ng-template>
+
+<ng-template #zoneCard let-card let-label="label">
+  <div class="zone-slot">
+    <button type="button" class="card zone-card" [attr.data-card-key]="card.key" [attr.aria-label]="card.name" [disabled]="!card.resolved" (click)="open(card)">
+      <app-card-hover
+        [name]="card.name"
+        [previewImage]="card.largeImage"
+        [disabled]="!card.resolved"
+        [marked]="hasCardIssue(card.key)"
+        [warning]="cardWarning(card.key)"
+      >
+        @if (card.image) {
+          <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" />
+        } @else {
+          <span class="card-placeholder">{{ card.name }}</span>
+        }
+        @if (hasCardIssue(card.key)) {
+          <ng-container *ngTemplateOutlet="warningTriangle; context: { $implicit: 'legal-tag' }" />
+        }
+      </app-card-hover>
+    </button>
+    @if (label) {
+      <span class="zone-label caps-label">{{ label }}</span>
+    }
+  </div>
+</ng-template>
+
+@if (picking()) {
+  <div class="picker-backdrop" (click)="picking.set(false)"></div>
+  <div class="picker panel" role="dialog" aria-modal="true" [attr.aria-label]="(zone()?.openSlot === 'partner' ? 'overview.choosePartner' : 'overview.chooseCommander') | t">
+    <header>
+      <h2>{{ (zone()?.openSlot === 'partner' ? 'overview.choosePartner' : 'overview.chooseCommander') | t }}</h2>
+      <button type="button" class="picker-close" (click)="picking.set(false)" [attr.aria-label]="'card.close' | t">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+      </button>
+    </header>
+    @if (candidates().length) {
+      <div class="picker-cards">
+        @for (card of candidates(); track card.key) {
+          <button type="button" class="card" [attr.aria-label]="card.name" (click)="pickCommander(card)">
+            <app-card-hover [name]="card.name" [previewImage]="card.largeImage">
+              <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" />
+            </app-card-hover>
+          </button>
+        }
+      </div>
+    } @else {
+      <p class="status">{{ 'overview.noCandidates' | t }}</p>
+    }
+  </div>
 }

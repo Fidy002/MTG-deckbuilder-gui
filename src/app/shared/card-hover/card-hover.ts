@@ -13,6 +13,7 @@ export type CardHalf = 'upper' | 'lower';
     '[class.disabled]': 'disabled()',
     '[class.split]': 'splitHalves()',
     '[class.lower]': "half() === 'lower'",
+    '[class.marked]': 'marked()',
   },
   template: `
     <ng-content />
@@ -67,6 +68,13 @@ export type CardHalf = 'upper' | 'lower';
       }
     }
 
+    // Marked cards (e.g. not legal in the deck's format) keep a red glow while not hovered.
+    :host(.marked:not(.hovered))::after {
+      inset: calc(-1 * var(--highlight-offset));
+      background: var(--color-illegal-glow);
+      filter: url('#hover-water-still');
+    }
+
     // Upper half in split mode: small, faint glow; the full glow pops in once the pointer reaches the lower half.
     :host(.split.hovered:not(.lower))::after {
       inset: calc(-1 * var(--highlight-offset-dim));
@@ -117,6 +125,9 @@ export class CardHover {
   readonly hitHeight = input('100%');
   readonly disabled = input(false);
   readonly splitHalves = input(false);
+  readonly marked = input(false);
+  // Shown in red with the large preview, e.g. why the card is not legal.
+  readonly warning = input<string>();
   readonly halfChange = output<CardHalf | undefined>();
 
   protected readonly overlay = inject(CardHoverOverlay);
@@ -134,7 +145,7 @@ export class CardHover {
     }
     this.hovered.set(true);
     this.setHalf(event);
-    this.overlay.enter(this.host.nativeElement, event.target as HTMLElement, event, this.previewFor(this.half()), this.name());
+    this.overlay.enter(this.host.nativeElement, event.target as HTMLElement, event, this.previewFor(this.half()), this.name(), this.warning());
   }
 
   protected move(event: MouseEvent): void {
@@ -163,7 +174,7 @@ export class CardHover {
     this.half.set(half);
     this.halfChange.emit(half);
     if (this.splitHalves() && wasHovered && half) {
-      this.overlay.schedulePreview(this.host.nativeElement, this.previewFor(half), this.name());
+      this.overlay.schedulePreview(this.host.nativeElement, this.previewFor(half), this.name(), this.warning());
     }
   }
 

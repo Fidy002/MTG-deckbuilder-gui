@@ -42,14 +42,12 @@ import { CardHoverOverlay } from './card-hover-overlay.service';
     </div>
 
     @if (overlay.preview(); as preview) {
-      <img
-        class="preview"
-        [src]="preview.image"
-        [alt]="preview.name"
-        [style.left.px]="preview.left"
-        [style.top.px]="preview.top"
-        [style.width.px]="overlay.previewWidth"
-      />
+      <div class="preview" [style.left.px]="preview.left" [style.top.px]="preview.top" [style.width.px]="overlay.previewWidth">
+        <img [src]="preview.image" [alt]="preview.name" />
+        @if (preview.warning) {
+          <p class="warning" role="status">{{ preview.warning }}</p>
+        }
+      </div>
     }
   `,
   styles: `
@@ -91,11 +89,33 @@ import { CardHoverOverlay } from './card-hover-overlay.service';
     .preview {
       position: fixed;
       z-index: 50;
-      height: auto;
-      aspect-ratio: var(--card-ratio);
-      border-radius: var(--radius-card);
-      filter: var(--shadow-stack);
       pointer-events: none;
+
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: var(--card-ratio);
+        border-radius: var(--radius-card);
+        filter: var(--shadow-stack);
+      }
+    }
+
+    // Lies over the lower part of the preview, so it always stays inside the viewport with it.
+    .warning {
+      position: absolute;
+      inset: auto 6% 5%;
+      margin: 0;
+      padding: var(--space-2) var(--space-3);
+      border: var(--line-width) solid #000;
+      border-radius: var(--radius-md);
+      background: var(--color-illegal-glow);
+      box-shadow: 0 4px 12px rgb(0 0 0 / 0.6);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      line-height: 1.35;
+      color: #fff;
+      white-space: pre-line;
     }
   `,
 })

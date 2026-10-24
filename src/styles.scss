@@ -14,6 +14,9 @@
   --color-line-strong: rgb(184 150 79 / 0.4);
   --color-danger: #c27b66;
   --color-highlight: #f3ede2;
+  --color-illegal-glow: #d42c22;
+  --legal-tag-size: 22px;
+  --heading-warning-size: 18px;
   --color-flag-frame: #000;
   --color-overlay: rgb(8 7 6 / 0.82);
   --color-counter-fill: rgb(15 13 11 / 0.88);
@@ -42,6 +45,7 @@
 
   --radius-sm: 2px;
   --radius-md: 4px;
+  --radius-lg: 12px;
   --radius-card: 4.5% / 3.25%;
   --control-height: 2.25rem;
   --line-width: 1px;

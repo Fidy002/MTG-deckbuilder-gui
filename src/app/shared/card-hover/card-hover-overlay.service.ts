@@ -13,6 +13,7 @@ export interface Ember {
 export interface HoverPreview {
   image: string;
   name: string;
+  warning?: string;
   left: number;
   top: number;
 }
@@ -41,14 +42,21 @@ export class CardHoverOverlay {
     this.pointerY = event.clientY;
   }
 
-  enter(card: HTMLElement, hitArea: HTMLElement, event: MouseEvent, previewImage: string | undefined, name: string): void {
+  enter(
+    card: HTMLElement,
+    hitArea: HTMLElement,
+    event: MouseEvent,
+    previewImage: string | undefined,
+    name: string,
+    warning?: string,
+  ): void {
     this.hide();
     this.trackPointer(event);
     this.spawnEmbers(hitArea.getBoundingClientRect());
-    this.schedulePreview(card, previewImage, name);
+    this.schedulePreview(card, previewImage, name, warning);
   }
 
-  schedulePreview(card: HTMLElement, previewImage: string | undefined, name: string): void {
+  schedulePreview(card: HTMLElement, previewImage: string | undefined, name: string, warning?: string): void {
     this.hide();
     if (!previewImage) {
       return;
@@ -62,7 +70,7 @@ export class CardHoverOverlay {
           : rect.right + PREVIEW_GAP;
       const maxTop = window.innerHeight - height - VIEWPORT_MARGIN;
       const top = Math.max(VIEWPORT_MARGIN, Math.min(this.pointerY - height / 2, maxTop));
-      this.preview.set({ image: previewImage, name, left, top });
+      this.preview.set({ image: previewImage, name, warning, left, top });
     }, HOVER_DELAY_MS);
   }
 

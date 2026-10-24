@@ -9,6 +9,7 @@ export interface Deck {
   text: string;
   language?: string;
   format?: DeckFormat;
+  legalityFormat?: string;
   colors?: string[];
   createdAt: string;
   updatedAt: string;
@@ -61,6 +62,10 @@ export class DeckService {
 
   setFormat(id: string, format: DeckFormat): void {
     this.patch(id, { format });
+  }
+
+  setLegalityFormat(id: string, legalityFormat: string): void {
+    this.patch(id, { legalityFormat });
   }
 
   setLanguage(id: string, language: string | undefined): void {
@@ -125,7 +130,7 @@ export class DeckService {
     this.updateText(id, serializeDecklist(entries));
   }
 
-  private patch(id: string, changes: Partial<Pick<Deck, 'name' | 'text' | 'language' | 'format'>>): void {
+  private patch(id: string, changes: Partial<Pick<Deck, 'name' | 'text' | 'language' | 'format' | 'legalityFormat'>>): void {
     const updatedAt = new Date().toISOString();
     this.state.update((decks) =>
       decks
