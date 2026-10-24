@@ -1,0 +1,219 @@
+<header class="wizard-head">
+  <div>
+    <a class="back-link" routerLink="/decks">← {{ 'decks.drawerTitle' | t }}</a>
+    <h2>{{ 'wizard.title' | t }}</h2>
+  </div>
+  <button type="button" (click)="createEmpty()">{{ 'wizard.empty' | t }}</button>
+</header>
+
+<ol class="progress">
+  @for (item of steps(); track item; let i = $index) {
+    <li [class.done]="i < stepIndex()" [class.current]="i === stepIndex()">
+      <span class="dot">{{ i + 1 }}</span>
+      <span class="caps-label">{{ stepLabel(item) | t }}</span>
+    </li>
+  }
+</ol>
+
+<section class="panel step">
+  @switch (step()) {
+    @case ('format') {
+      <h3>{{ 'wizard.formatQuestion' | t }}</h3>
+      <div class="choices two">
+        <button type="button" class="choice" [class.active]="format() === 'commander'" (click)="chooseFormat('commander')">
+          <strong>{{ 'decks.formatCommander' | t }}</strong>
+          <span>{{ 'wizard.formatCommanderHint' | t }}</span>
+        </button>
+        <button type="button" class="choice" [class.active]="format() === 'constructed'" (click)="chooseFormat('constructed')">
+          <strong>{{ 'decks.formatConstructed' | t }}</strong>
+          <span>{{ 'wizard.formatConstructedHint' | t }}</span>
+        </button>
+      </div>
+    }
+
+    @case ('level') {
+      @if (format() === 'commander') {
+        <h3>{{ 'wizard.bracketQuestion' | t }}</h3>
+        <p class="lead">{{ 'bracket.infoText' | t }}</p>
+        <div class="scale" aria-hidden="true">
+          <span>Kitchen Table</span>
+          <span>{{ 'wizard.tournament' | t }}</span>
+        </div>
+        <div class="choices five" role="radiogroup" [attr.aria-label]="'bracket.label' | t">
+          @for (option of brackets; track option.value) {
+            <button
+              type="button"
+              role="radio"
+              class="choice bracket-choice"
+              [class.active]="bracket() === option.value"
+              [attr.aria-checked]="bracket() === option.value"
+              (click)="bracket.set(option.value)"
+            >
+              <span class="bracket-number">{{ option.value }}</span>
+              <strong>{{ option.name }}</strong>
+              <span>{{ bracketLevelKey(option.value) | t }}</span>
+            </button>
+          }
+        </div>
+      } @else {
+        <h3>{{ 'wizard.legalityQuestion' | t }}</h3>
+        <div class="choices formats">
+          @for (option of constructedFormats; track option.id) {
+            <button type="button" class="choice" [class.active]="legalityFormat() === option.id" (click)="legalityFormat.set(option.id)">
+              <strong>{{ option.label }}</strong>
+            </button>
+          }
+        </div>
+      }
+      <div class="nav">
+        <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
+        <button type="button" class="primary" (click)="step.set('cards')">{{ 'wizard.next' | t }}</button>
+      </div>
+    }
+
+    @case ('cards') {
+      <h3>{{ 'wizard.cardsQuestion' | t }}</h3>
+      <p class="lead">{{ 'wizard.cardsSearchHint' | t }}</p>
+      <app-card-search [compact]="true" (picked)="addOwned($event)" />
+      @if (lastAdded(); as added) {
+        <p class="added" role="status">{{ 'decks.cardAdded' | t: { card: added } }}</p>
+      }
+      <div class="tab-bar view-tabs" role="tablist">
+        <button type="button" role="tab" [class.active]="ownedView() === 'overview'" [attr.aria-selected]="ownedView() === 'overview'" (click)="ownedView.set('overview')">
+          {{ 'decks.viewOverview' | t }}
+        </button>
+        <button type="button" role="tab" [class.active]="ownedView() === 'text'" [attr.aria-selected]="ownedView() === 'text'" (click)="ownedView.set('text')">
+          {{ 'decks.viewText' | t }}
+        </button>
+      </div>
+      @if (ownedView() === 'overview') {
+        @if (ownedEntries().length) {
+          <app-deck-overview [entries]="ownedEntries()" [language]="cardLanguage()" deckId="" [sort]="deckSort()" [editable]="false" />
+        } @else {
+          <p class="muted">{{ 'wizard.noOwnedCards' | t }}</p>
+        }
+      } @else {
+        <p class="lead">{{ 'wizard.cardsHint' | t }}</p>
+        <textarea
+          spellcheck="false"
+          [value]="ownedText()"
+          (input)="onOwnedInput($event)"
+          [placeholder]="'wizard.cardsPlaceholder' | t"
+        ></textarea>
+      }
+      <div class="nav">
+        <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
+        <button type="button" class="primary" [disabled]="busy()" (click)="submitCards()">
+          {{ (ownedText().trim() ? 'wizard.next' : 'wizard.skipCards') | t }}
+        </button>
+      </div>
+    }
+
+    @case ('colors') {
+      <h3>{{ 'wizard.colorsQuestion' | t }}</h3>
+      <ng-container *ngTemplateOutlet="ownedSummary" />
+      <div class="colors">
+        @for (color of colorOrder; track color) {
+          <button type="button" class="color" [class.active]="colors().includes(color)" (click)="toggleColor(color)" [attr.aria-pressed]="colors().includes(color)">
+            <img [src]="manaSymbolUrl(color)" [alt]="color" width="40" height="40" />
+          </button>
+        }
+      </div>
+      <div class="nav">
+        <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
+        <button type="button" class="primary" [disabled]="busy()" (click)="loadSuggestions()">{{ 'wizard.next' | t }}</button>
+      </div>
+    }
+
+    @case ('commander') {
+      <h3>{{ 'wizard.commanderQuestion' | t }}</h3>
+      <ng-container *ngTemplateOutlet="ownedSummary" />
+      @if (ownedCommanders().length) {
+        <p class="caps-label">{{ 'wizard.fromYourCards' | t }}</p>
+        <div class="cards">
+          @for (card of ownedCommanders(); track card.id) {
+            <ng-container *ngTemplateOutlet="pickCard; context: { $implicit: card, active: commander()?.name === card.name, pick: true }" />
+          }
+        </div>
+      }
+      <p class="caps-label">{{ (owned().length ? 'wizard.fittingCommanders' : 'wizard.popularCommanders') | t }}</p>
+      <div class="cards">
+        @for (card of commanderOptions(); track card.id) {
+          <ng-container *ngTemplateOutlet="pickCard; context: { $implicit: card, active: commander()?.name === card.name, pick: true }" />
+        } @empty {
+          <p class="muted">{{ 'wizard.noCommanders' | t }}</p>
+        }
+      </div>
+      <div class="nav">
+        <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
+        <button type="button" [disabled]="busy()" (click)="chooseCommander(undefined)">{{ 'wizard.withoutCommander' | t }}</button>
+      </div>
+    }
+
+    @case ('suggestions') {
+      <h3>{{ 'wizard.suggestionsTitle' | t }}</h3>
+      <p class="lead">{{ 'wizard.suggestionsHint' | t: { count: selectedCount() } }}</p>
+      @for (group of groups(); track group.role) {
+        @if (group.cards.length) {
+          <p class="caps-label">{{ roleLabel(group.role) | t }} · {{ group.cards.length }}</p>
+          <div class="cards">
+            @for (card of group.cards; track card.id) {
+              <ng-container *ngTemplateOutlet="pickCard; context: { $implicit: card, active: isSelected(card), pick: false }" />
+            }
+          </div>
+        }
+      }
+      <div class="nav">
+        <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
+        <button type="button" class="primary" (click)="create()">{{ 'wizard.create' | t }}</button>
+      </div>
+    }
+  }
+
+  @if (busy()) {
+    <div class="busy" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      <span class="caps-label">{{ 'wizard.loading' | t }}</span>
+    </div>
+  }
+  @if (failed()) {
+    <p class="status error">{{ 'search.error' | t }}</p>
+  }
+</section>
+
+<ng-template #ownedSummary>
+  @if (owned().length) {
+    <p class="muted">
+      {{ 'wizard.ownedCount' | t: { count: ownedCount() } }}
+      @if (notFound().length) {
+        · {{ 'overview.notFound' | t: { names: notFound().join(', ') } }}
+      }
+    </p>
+  }
+</ng-template>
+
+<ng-template #pickCard let-card let-active="active" let-pick="pick">
+  <button
+    type="button"
+    class="pick"
+    [class.active]="active"
+    [class.off]="!pick && !active"
+    [attr.aria-pressed]="active"
+    [attr.aria-label]="name(card)"
+    [disabled]="busy()"
+    (click)="pick ? chooseCommander(card) : toggleSuggestion(card)"
+  >
+    <app-card-hover [name]="name(card)" [previewImage]="largeImage(card)">
+      @if (image(card); as src) {
+        <img [src]="src" [alt]="name(card)" loading="lazy" width="488" height="680" />
+      } @else {
+        <span class="card-placeholder">{{ name(card) }}</span>
+      }
+      @if (!pick) {
+        <span class="check" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10" /></svg>
+        </span>
+      }
+    </app-card-hover>
+  </button>
+</ng-template>

@@ -78,6 +78,8 @@ export class DeckOverview {
   readonly legalityFormat = input<string>();
   // Commander decks show commanders and companion in their own framed zone in front of all groups.
   readonly commanderZone = input(false);
+  // Off for lists that are not a saved deck yet (deck wizard): no editing actions in the card preview.
+  readonly editable = input(true);
   readonly colorsChange = output<string[]>();
   readonly legalityChange = output<LegalityResult | undefined>();
   // Clicking any warning triangle asks the page to show the legality details.

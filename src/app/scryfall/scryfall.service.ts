@@ -60,6 +60,15 @@ export class ScryfallService {
     );
   }
 
+  /** First page of a search, most played cards first (EDHREC rank). */
+  findPopularCards(query: string): Observable<ScryfallCard[]> {
+    const params = new HttpParams().set('q', query).set('unique', 'cards').set('order', 'edhrec');
+    return this.http.get<ScryfallList<ScryfallCard>>(`${API_URL}/cards/search`, { params }).pipe(
+      map((list) => list.data),
+      catchError(notFoundAs<ScryfallCard[]>([])),
+    );
+  }
+
   findCards(query: string, unique: 'cards' | 'prints'): Observable<ScryfallCard[]> {
     const params = new HttpParams().set('q', query).set('unique', unique);
     return this.http.get<ScryfallList<ScryfallCard>>(`${API_URL}/cards/search`, { params }).pipe(

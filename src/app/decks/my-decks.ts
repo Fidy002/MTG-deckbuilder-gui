@@ -165,8 +165,7 @@ export class MyDecks {
   }
 
   protected create(): void {
-    const deck = this.deckService.create(this.i18n.translate('decks.defaultName'), '', 'commander');
-    this.router.navigate(['/decks', deck.id]);
+    this.router.navigate(['/decks/new']);
   }
 
   protected rename(id: string, event: Event): void {

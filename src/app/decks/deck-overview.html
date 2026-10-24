@@ -131,44 +131,46 @@
 @if (selected(); as card) {
   @if (card.resolved; as resolved) {
     <app-card-preview [card]="resolved.card" [language]="language()" (closed)="selected.set(undefined)">
-      <div class="deck-actions">
-        <div class="count-field">
-          <span class="caps-label">{{ 'overview.count' | t }}</span>
-          <div class="stepper">
-            <button type="button" [attr.aria-label]="'overview.decrease' | t" (click)="changeCount(card, -1)">
-              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
-            </button>
-            <span class="stepper-value" aria-live="polite">{{ card.entry.count }}</span>
-            <button type="button" [attr.aria-label]="'overview.increase' | t" (click)="changeCount(card, 1)">
-              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-            </button>
+      @if (editable()) {
+        <div class="deck-actions">
+          <div class="count-field">
+            <span class="caps-label">{{ 'overview.count' | t }}</span>
+            <div class="stepper">
+              <button type="button" [attr.aria-label]="'overview.decrease' | t" (click)="changeCount(card, -1)">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
+              </button>
+              <span class="stepper-value" aria-live="polite">{{ card.entry.count }}</span>
+              <button type="button" [attr.aria-label]="'overview.increase' | t" (click)="changeCount(card, 1)">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+            </div>
           </div>
+          <label class="category-field">
+            <span class="caps-label">{{ 'overview.category' | t }}</span>
+            <input
+              type="text"
+              list="deck-categories"
+              [value]="card.entry.category ?? ''"
+              [placeholder]="'overview.categoryDefault' | t: { type: defaultCategory(card) }"
+              (change)="setCategory(card, $event)"
+            />
+            <datalist id="deck-categories">
+              @for (category of categories(); track category) {
+                <option [value]="category"></option>
+              }
+            </datalist>
+          </label>
+          <button type="button" (click)="setCommander(card, card.entry.section !== 'commander')">
+            {{ (card.entry.section === 'commander' ? 'overview.removeCommander' : 'overview.makeCommander') | t }}
+          </button>
+          <button type="button" [disabled]="isCover(card)" (click)="setCover(card)">
+            {{ (isCover(card) ? 'overview.isCover' : 'overview.makeCover') | t }}
+          </button>
+          <button type="button" class="remove" (click)="changeCount(card, -card.entry.count)">
+            {{ 'overview.remove' | t }}
+          </button>
         </div>
-        <label class="category-field">
-          <span class="caps-label">{{ 'overview.category' | t }}</span>
-          <input
-            type="text"
-            list="deck-categories"
-            [value]="card.entry.category ?? ''"
-            [placeholder]="'overview.categoryDefault' | t: { type: defaultCategory(card) }"
-            (change)="setCategory(card, $event)"
-          />
-          <datalist id="deck-categories">
-            @for (category of categories(); track category) {
-              <option [value]="category"></option>
-            }
-          </datalist>
-        </label>
-        <button type="button" (click)="setCommander(card, card.entry.section !== 'commander')">
-          {{ (card.entry.section === 'commander' ? 'overview.removeCommander' : 'overview.makeCommander') | t }}
-        </button>
-        <button type="button" [disabled]="isCover(card)" (click)="setCover(card)">
-          {{ (isCover(card) ? 'overview.isCover' : 'overview.makeCover') | t }}
-        </button>
-        <button type="button" class="remove" (click)="changeCount(card, -card.entry.count)">
-          {{ 'overview.remove' | t }}
-        </button>
-      </div>
+      }
     </app-card-preview>
   }
 }

@@ -85,8 +85,7 @@ export class DeckGallery {
   });
 
   protected create(): void {
-    const deck = this.deckService.create(this.i18n.translate('decks.defaultName'), '', 'commander');
-    this.router.navigate(['/decks', deck.id]);
+    this.router.navigate(['/decks/new']);
   }
 
   protected onImported(text: string): void {

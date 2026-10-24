@@ -70,6 +70,14 @@ function oracleText(card: ScryfallCard): string {
   return [card.oracle_text, ...(card.card_faces ?? []).map((f) => f.oracle_text)].join('\n').toLowerCase();
 }
 
+export function isMassLandDenial(card: ScryfallCard): boolean {
+  return MASS_LAND_DENIAL.test(oracleText(card));
+}
+
+export function isExtraTurn(card: ScryfallCard): boolean {
+  return EXTRA_TURN.test(oracleText(card));
+}
+
 function frontName(card: ScryfallCard): string {
   return card.name.split(' // ')[0];
 }
