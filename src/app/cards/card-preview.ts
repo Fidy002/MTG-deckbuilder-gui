@@ -84,7 +84,7 @@ export class CardPreview {
   protected addToDeck(): void {
     const deck =
       this.deckService.get(this.targetDeckId() ?? '') ??
-      this.deckService.create(this.i18n.translate('decks.defaultName'));
+      this.deckService.create(this.i18n.translate('decks.defaultName'), '', 'commander');
     const card = this.shown();
     this.deckService.addCard(deck.id, {
       name: deckCardName(card),

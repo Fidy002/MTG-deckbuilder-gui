@@ -59,6 +59,13 @@ describe('checkCommanderLegality', () => {
     expect([thrasios, wilson, background, krenko.card!].map(allowsSecondCommander)).toEqual([true, true, true, false]);
   });
 
+  it('marks every line of a card that is in the deck too often', () => {
+    const bears = (n: string) => ({ key: n, entry: { count: 1, name: 'Grizzly Bears', section: 'main' as const }, card: card('Grizzly Bears') });
+    const result = checkCommanderLegality([krenko, bears('a'), bears('b')]);
+    expect(result.issues.filter((i) => i.kind === 'notSingleton').length).toBe(1);
+    expect([result.cardIssues.has('a'), result.cardIssues.has('b')]).toEqual([true, true]);
+  });
+
   it('allows any number of basic lands and cards that say so', () => {
     const rats = card('Relentless Rats', { type: 'Creature — Rat', text: 'A deck can have any number of cards named Relentless Rats.' });
     const kinds = checkCommanderLegality([krenko, line('Relentless Rats', 'main', rats, 30), line('Mountain', 'main', card('Mountain'), 69)])

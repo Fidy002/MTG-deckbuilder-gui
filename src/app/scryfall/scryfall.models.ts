@@ -37,6 +37,7 @@ export interface ScryfallCard {
   color_identity?: string[];
   keywords?: string[];
   legalities?: Record<string, 'legal' | 'not_legal' | 'banned' | 'restricted'>;
+  game_changer?: boolean;
   mana_cost?: string;
   type_line?: string;
   printed_type_line?: string;

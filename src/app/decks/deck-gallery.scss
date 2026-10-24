@@ -1,0 +1,169 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.gallery-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+
+  h2 {
+    margin: 0;
+    font-size: var(--text-xl);
+  }
+
+  .actions {
+    display: flex;
+    gap: var(--space-2);
+  }
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// 16:9 tile with the cover card's art; a dark gradient keeps the text readable on any art.
+.tile {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: var(--line-width) solid var(--color-line);
+  border-radius: var(--radius-lg);
+  // Clipped to the padding box: otherwise the art shines through the translucent border as a light edge.
+  background: var(--color-surface) center 25% / cover no-repeat padding-box;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.5);
+  color: var(--color-text);
+  text-decoration: none;
+  transition:
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.25) 55%, transparent);
+  }
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--color-accent);
+    transform: translateY(-2px);
+  }
+}
+
+.new-tile {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: auto;
+  border: 2px dashed var(--color-line-strong);
+  background: rgb(184 150 79 / 0.04);
+  box-shadow: none;
+  color: var(--color-accent);
+  font-size: var(--text-md);
+
+  &::before {
+    content: none;
+  }
+
+  .icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    background: rgb(184 150 79 / 0.1);
+  }
+}
+
+.tile-info {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-4);
+}
+
+.tile-name {
+  overflow: hidden;
+  font-family: var(--font-deck-name);
+  font-size: var(--text-xl);
+  letter-spacing: var(--tracking-caps);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 0.8);
+}
+
+.tile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tile-colors {
+  display: flex;
+  gap: 2px;
+}
+
+.tile-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+
+  &.sideboard {
+    margin-left: calc(-1 * var(--space-2));
+    color: var(--color-sideboard);
+  }
+
+  .card-icon {
+    width: 16px;
+    height: 16px;
+    fill: rgb(0 0 0 / 0.4);
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+  }
+}
+
+.tile-format {
+  margin-left: auto;
+  color: var(--color-accent);
+}
+
+.tile-bracket {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: calc(-1 * var(--space-2));
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-bg);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-text-muted);
+}

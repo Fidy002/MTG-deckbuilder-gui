@@ -49,6 +49,40 @@ describe('parseDecklist', () => {
     ]);
   });
 
+  it('reads free-form "//" headers with decorations as sections and categories', () => {
+    const text = [
+      '//Commander',
+      '1 Erinis, Gloom Stalker',
+      '//🟢 Main Deck -  Lands',
+      '14 Forest',
+      '1 Disciple of Freyalise // Garden of Freyalise',
+      '//🟢 Main Deck - Card Advantage',
+      '1 Six',
+      '//⚪ White - Modular Deck - Interaction',
+      '1 Path to Exile',
+      '//Maybeboard',
+      '1 Sapling Nursery',
+    ].join('\n');
+    expect(parseDecklist(text)).toEqual([
+      { count: 1, name: 'Erinis, Gloom Stalker', section: 'commander' },
+      { count: 14, name: 'Forest', section: 'main' },
+      { count: 1, name: 'Disciple of Freyalise // Garden of Freyalise', section: 'main' },
+      { count: 1, name: 'Six', category: 'Card Advantage', section: 'main' },
+      { count: 1, name: 'Path to Exile', category: 'White - Modular Deck - Interaction', section: 'main' },
+      { count: 1, name: 'Sapling Nursery', section: 'maybeboard' },
+    ]);
+  });
+
+  it('reads card type lines as headers of the main deck', () => {
+    const text = 'Commander\n1 Sisay, Weatherlight Captain\n\nPlaneswalker\n1 Teferi, Time Raveler\n\nInstant\n1 Force of Will\n\nLand\n1 Bayou';
+    expect(parseDecklist(text)).toEqual([
+      { count: 1, name: 'Sisay, Weatherlight Captain', section: 'commander' },
+      { count: 1, name: 'Teferi, Time Raveler', section: 'main' },
+      { count: 1, name: 'Force of Will', section: 'main' },
+      { count: 1, name: 'Bayou', section: 'main' },
+    ]);
+  });
+
   it('round-trips through the storage format', () => {
     const text = 'Commander\n1 Krenko, Mob Boss (M13) 141\n\nDeck\n4 Lightning Bolt (M10) 146 *F*';
     expect(serializeDecklist(parseDecklist(text))).toBe(text);

@@ -1,14 +1,23 @@
-<aside class="panel">
+@if (drawerOpen()) {
+  <div class="drawer-backdrop" (click)="drawerOpen.set(false)"></div>
+}
+<aside class="panel" [class.open]="drawerOpen()" [attr.aria-hidden]="!drawerOpen()" [inert]="!drawerOpen()">
+  <div class="drawer-head">
+    <span class="caps-label">{{ 'decks.drawerTitle' | t }}</span>
+    <button type="button" class="icon-button" (click)="drawerOpen.set(false)" [attr.aria-label]="'card.close' | t">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+    </button>
+  </div>
   <div class="actions">
-    <button type="button" class="primary" (click)="create()">{{ 'decks.new' | t }}</button>
-    <button type="button" (click)="importMode.set('new')">{{ 'import.newDeck' | t }}</button>
+    <button type="button" class="primary" (click)="create(); drawerOpen.set(false)">{{ 'decks.new' | t }}</button>
+    <button type="button" (click)="importMode.set('new'); drawerOpen.set(false)">{{ 'import.newDeck' | t }}</button>
   </div>
 
   @if (decks().length) {
     <ul>
       @for (item of decks(); track item.id) {
         <li>
-          <a [routerLink]="['/decks', item.id]" routerLinkActive="active">
+          <a [routerLink]="['/decks', item.id]" routerLinkActive="active" (click)="drawerOpen.set(false)">
             <span class="name-row">
               @if (showDeckFlags() && item.languageFlag; as flag) {
                 <app-flag [code]="flag" />
@@ -22,7 +31,12 @@
                 </span>
               }
             </span>
-            <small class="card-count" [attr.data-deck-count]="item.id">{{ 'decks.cardCount' | t: { count: item.cardCount } }}</small>
+            <small class="card-count" [attr.data-deck-count]="item.id">
+              {{ 'decks.cardCount' | t: { count: item.cardCount } }}
+              @if (item.sideboardCount) {
+                · <span class="sideboard-text">{{ 'decks.sideboardCount' | t: { count: item.sideboardCount } }}</span>
+              }
+            </small>
           </a>
         </li>
       }
@@ -35,6 +49,17 @@
 <section class="editor">
   @if (deck(); as deck) {
     <div class="title-row">
+      <button type="button" class="icon-button" (click)="drawerOpen.set(true)" [title]="'decks.drawerTitle' | t" [attr.aria-label]="'decks.drawerTitle' | t" [attr.aria-expanded]="drawerOpen()">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      </button>
+      @if (view() === 'overview' && legality()?.issues?.length) {
+        <button type="button" class="title-warning" (click)="legalityOpen.set(true)" [title]="'legality.title' | t: { format: formatLabel(legalityFormat()) }" [attr.aria-label]="'legality.title' | t: { format: formatLabel(legalityFormat()) }">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path class="warning-fill" d="M12 2.5 1.5 21h21L12 2.5z" />
+            <path class="warning-mark" d="M12 9.5v5.5M12 17.6v.1" />
+          </svg>
+        </button>
+      }
       <label class="name-field" [attr.data-value]="deck.name || ('decks.untitled' | t)">
         <span class="visually-hidden">{{ 'decks.name' | t }}</span>
         <input
@@ -50,6 +75,22 @@
           @for (symbol of symbols; track symbol) {
             <img [src]="manaSymbolUrl(symbol)" [alt]="symbol" width="28" height="28" />
           }
+        </span>
+      }
+      <span class="deck-card-count" [attr.aria-label]="'decks.cardCount' | t: { count: deck.cardCount }">
+        <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="8" y="3" width="11" height="15" rx="1.5" />
+          <rect x="5" y="6" width="11" height="15" rx="1.5" />
+        </svg>
+        {{ deck.cardCount }}
+      </span>
+      @if (deck.sideboardCount) {
+        <span class="deck-card-count sideboard" [title]="'decks.sideboardCount' | t: { count: deck.sideboardCount }" [attr.aria-label]="'decks.sideboardCount' | t: { count: deck.sideboardCount }">
+          <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="8" y="3" width="11" height="15" rx="1.5" />
+          <rect x="5" y="6" width="11" height="15" rx="1.5" />
+        </svg>
+          {{ deck.sideboardCount }}
         </span>
       }
       <div class="title-actions">
@@ -118,8 +159,66 @@
         </label>
       }
 
+      @if (deckFormat() === 'commander') {
+        <div class="bracket">
+          <span class="bracket-label">
+            <span class="caps-label">{{ 'bracket.label' | t }}</span>
+            <button
+              type="button"
+              class="bracket-help"
+              (click)="bracketInfoOpen.set(!bracketInfoOpen())"
+              [attr.aria-expanded]="bracketInfoOpen()"
+              [attr.aria-label]="'bracket.infoTitle' | t"
+              [title]="'bracket.infoTitle' | t"
+            >?</button>
+          </span>
+          <div class="bracket-steps" role="radiogroup" [attr.aria-label]="'bracket.label' | t">
+            @for (option of brackets; track option.value) {
+              <button
+                type="button"
+                role="radio"
+                [class.active]="deck.bracket === option.value"
+                [attr.aria-checked]="deck.bracket === option.value"
+                [title]="option.value + ' – ' + option.name"
+                (click)="setBracket(deck.id, deck.bracket, option.value)"
+              >{{ option.value }}</button>
+            }
+          </div>
+          @if (bracketInfoOpen()) {
+            <div class="bracket-info panel" role="dialog" [attr.aria-label]="'bracket.infoTitle' | t">
+              <h4>{{ 'bracket.infoTitle' | t }}</h4>
+              <p>{{ 'bracket.infoText' | t }}</p>
+              <ol>
+                @for (option of brackets; track option.value) {
+                  <li [class.active]="deck.bracket === option.value">
+                    <strong>{{ option.name }}</strong> – {{ bracketLevelKey(option.value) | t }}
+                  </li>
+                }
+              </ol>
+              <button type="button" class="primary" [disabled]="estimating()" (click)="estimateBracket(deck.id)">
+                {{ (estimating() ? 'bracket.autoBusy' : 'bracket.auto') | t }}
+              </button>
+              @if (bracketEstimate(); as estimate) {
+                <div class="bracket-result">
+                  <p><strong>{{ 'bracket.result' | t: { bracket: estimate.bracket } }}</strong></p>
+                  <ul>
+                    <li>{{ 'bracket.gameChangers' | t: { count: estimate.gameChangers.length, names: estimate.gameChangers.join(', ') || '–' } }}</li>
+                    <li>{{ 'bracket.massLandDenial' | t: { names: estimate.massLandDenial.join(', ') || '–' } }}</li>
+                    <li>{{ 'bracket.extraTurns' | t: { names: estimate.extraTurns.join(', ') || '–' } }}</li>
+                    <li>{{ 'bracket.tutors' | t: { names: estimate.tutors.join(', ') || '–' } }}</li>
+                    <li>{{ 'bracket.fastMana' | t: { count: estimate.fastMana.length, names: estimate.fastMana.join(', ') || '–' } }}</li>
+                    <li>{{ 'bracket.combos' | t: { names: estimate.combos.join(', ') || '–' } }}</li>
+                  </ul>
+                </div>
+              }
+              <p class="bracket-note">{{ 'bracket.note' | t }}</p>
+            </div>
+          }
+        </div>
+      }
+
       <label class="legality-toggle">
-        <input type="checkbox" role="switch" [checked]="legalityCheck()" (change)="toggleLegality($event)" />
+        <input type="checkbox" role="switch" [checked]="legalityCheck()" (change)="toggleLegality(deck.id, $event)" />
         <span>{{ 'decks.legalityToggle' | t }}</span>
       </label>
 
@@ -132,16 +231,6 @@
         </select>
       </label>
 
-      @if (view() === 'overview') {
-        <label class="sort">
-          <span class="caps-label">{{ 'decks.sortBy' | t }}</span>
-          <select (change)="setSort($event)">
-            @for (option of sortOptions; track option.value) {
-              <option [value]="option.value" [selected]="option.value === sort()">{{ option.label | t }}</option>
-            }
-          </select>
-        </label>
-      }
       </div>
     </div>
 
@@ -154,36 +243,6 @@
         }
         {{ toast.key | t: toast.params }}
       </p>
-    }
-
-    @if (view() === 'overview' && legality(); as legality) {
-      <section class="legality" [class.ok]="!legality.issues.length" aria-live="polite">
-        <p class="legality-title">
-          @if (legality.issues.length) {
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z" /><path d="M12 10v5M12 18h.01" /></svg>
-            {{ 'legality.title' | t: { format: formatLabel(legality.format) } }} · {{ 'legality.problems' | t: { count: legality.issues.length } }}
-          } @else {
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
-            {{ 'legality.title' | t: { format: formatLabel(legality.format) } }} · {{ 'legality.ok' | t }}
-          }
-        </p>
-        @if (legality.issues.length) {
-          <ul>
-            @for (issue of legality.issues; track $index) {
-              <li>{{ issueKey(issue) | t: issueParams(issue, legality.format) }}</li>
-            }
-          </ul>
-          @if (canFix(legality.issues, 'all')) {
-            <div class="legality-actions">
-              @for (option of legalityFixes; track option.fix) {
-                <button type="button" [disabled]="!canFix(legality.issues, option.fix)" (click)="fixLegality(deck.id, legality.issues, option.fix)">
-                  {{ option.label | t }}
-                </button>
-              }
-            </div>
-          }
-        }
-      </section>
     }
 
     <section class="add-cards panel" [class.open]="addCardsOpen()">
@@ -201,7 +260,69 @@
       </div>
     </section>
 
+    @if (view() === 'overview' && legality(); as legality) {
+      @if (legality.issues.length) {
+        <button
+          type="button"
+          class="legality-button"
+          [class.open]="legalityOpen()"
+          (click)="legalityOpen.set(!legalityOpen())"
+          [title]="'legality.title' | t: { format: formatLabel(legality.format) }"
+          [attr.aria-label]="'legality.title' | t: { format: formatLabel(legality.format) }"
+          [attr.aria-expanded]="legalityOpen()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path class="warning-fill" d="M12 2.5 1.5 21h21L12 2.5z" />
+            <path class="warning-mark" d="M12 9.5v5.5M12 17.6v.1" />
+          </svg>
+        </button>
+      }
+      @if (legalityOpen()) {
+        <div class="legality-backdrop" (click)="legalityOpen.set(false)"></div>
+        <section class="legality legality-popup panel" [class.ok]="!legality.issues.length" role="dialog" aria-live="polite">
+          <button type="button" class="icon-button legality-close" (click)="legalityOpen.set(false)" [attr.aria-label]="'card.close' | t">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+          <p class="legality-title">
+            @if (legality.issues.length) {
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z" /><path d="M12 10v5M12 18h.01" /></svg>
+              {{ 'legality.title' | t: { format: formatLabel(legality.format) } }} · {{ 'legality.problems' | t: { count: legality.issues.length } }}
+            } @else {
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
+              {{ 'legality.title' | t: { format: formatLabel(legality.format) } }} · {{ 'legality.ok' | t }}
+            }
+          </p>
+          @if (legality.issues.length) {
+            <ul>
+              @for (issue of legality.issues; track $index) {
+                <li>{{ issueKey(issue) | t: issueParams(issue, legality.format) }}</li>
+              }
+            </ul>
+            @if (canFix(legality.issues, 'all')) {
+              <div class="legality-actions">
+                @for (option of legalityFixes; track option.fix) {
+                  <button type="button" [disabled]="!canFix(legality.issues, option.fix)" (click)="fixLegality(deck.id, legality.issues, option.fix)">
+                    {{ option.label | t }}
+                  </button>
+                }
+              </div>
+            }
+          }
+        </section>
+      }
+    }
+
     @if (view() === 'overview') {
+      <div class="overview-bar">
+        <label class="sort">
+          <span class="caps-label">{{ 'decks.sortBy' | t }}</span>
+          <select (change)="setSort($event)">
+            @for (option of sortOptions; track option.value) {
+              <option [value]="option.value" [selected]="option.value === sort()">{{ option.label | t }}</option>
+            }
+          </select>
+        </label>
+      </div>
       <app-deck-overview
         [entries]="entries()"
         [language]="deckLanguage()"
@@ -211,6 +332,7 @@
         [commanderZone]="deckFormat() === 'commander'"
         (colorsChange)="setDeckColors(deck.id, $event)"
         (legalityChange)="legality.set($event)"
+        (legalityRequested)="legalityOpen.set(true)"
       />
     } @else {
       <label class="list-field">
@@ -228,16 +350,19 @@
       <span class="muted">
         {{ 'decks.cardCount' | t: { count: deck.cardCount } }}
         @if (sideboardCount()) {
-          · {{ 'decks.sideboardCount' | t: { count: sideboardCount() } }}
+          · <span class="sideboard-text">{{ 'decks.sideboardCount' | t: { count: sideboardCount() } }}</span>
         }
         · {{ 'decks.updated' | t: { date: updatedAt() } }}
       </span>
       <button type="button" class="delete" (click)="delete(deck.id, deck.name)">{{ 'decks.delete' | t }}</button>
     </footer>
-  } @else if (id()) {
-    <p class="muted">{{ 'decks.notFound' | t }}</p>
   } @else {
-    <p class="muted">{{ 'decks.select' | t }}</p>
+    <div class="title-row">
+      <button type="button" class="icon-button" (click)="drawerOpen.set(true)" [title]="'decks.drawerTitle' | t" [attr.aria-label]="'decks.drawerTitle' | t" [attr.aria-expanded]="drawerOpen()">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      </button>
+      <p class="muted">{{ (id() ? 'decks.notFound' : 'decks.select') | t }}</p>
+    </div>
   }
 </section>
 

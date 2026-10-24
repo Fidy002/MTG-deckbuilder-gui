@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, ElementRef, computed, inject, input, linkedSignal, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { CardSearch } from '../cards/card-search';
 import { I18nService, TranslationKey, TranslationParams } from '../i18n/i18n.service';
@@ -13,9 +13,11 @@ import { DECK_EXPORT_FORMATS, DeckExportFormat } from './deck-formats';
 import { DeckOverview } from './deck-overview';
 import { CONSTRUCTED_FORMATS, LegalityFix, LegalityIssue, applyLegalityFix, canFix, LegalityResult, legalityFormatLabel, legalityIssueKey, legalityIssueParams } from './deck-legality';
 import { DeckCardsService, cardKey } from './deck-cards.service';
-import { DeckService, countCards } from './deck.service';
+import { DeckService, countCards, countSideboard } from './deck.service';
 import { DeckFormat, countEntries, detectFormat, parseDecklist, serializeDecklist } from './decklist';
 import { ImportDialog } from './import-dialog';
+import { BRACKETS, Bracket, BracketEstimate, estimateBracket } from './deck-brackets';
+import { firstValueFrom } from 'rxjs';
 
 type View = 'overview' | 'text';
 
@@ -40,6 +42,7 @@ const COUNT_FLASH: Keyframe[] = [
   imports: [TranslatePipe, RouterLink, RouterLinkActive, DeckOverview, ImportDialog, LanguageSelect, Flag, CardSearch],
   host: {
     '(document:click)': 'onDocumentClick($event)',
+    '(document:keydown.escape)': 'drawerOpen.set(false); legalityOpen.set(false); bracketInfoOpen.set(false)',
   },
   templateUrl: './my-decks.html',
   styleUrl: './my-decks.scss',
@@ -55,9 +58,11 @@ export class MyDecks {
   readonly id = input<string>();
 
   protected readonly view = signal<View>('overview');
+  protected readonly drawerOpen = signal(false);
+  protected readonly legalityOpen = signal(false);
   protected readonly manaSymbolUrl = manaSymbolUrl;
   protected readonly sort = this.settings.deckSort.asReadonly();
-  protected readonly legalityCheck = this.settings.legalityCheck.asReadonly();
+  protected readonly legalityCheck = computed(() => this.deck()?.legalityCheck ?? this.settings.legalityCheck());
   protected readonly formatOptions: { value: DeckFormat; label: TranslationKey }[] = [
     { value: 'commander', label: 'decks.formatCommander' },
     { value: 'constructed', label: 'decks.formatConstructed' },
@@ -90,7 +95,7 @@ export class MyDecks {
     return this.deckService.decks().map((deck) => {
       const cardCount = countCards(deck.text);
       const language = CARD_LANGUAGES.find((l) => l.scryfallCode === (deck.language ?? globalLanguage));
-      return { ...deck, cardCount, colorSymbols: colorSymbols(deck.colors, cardCount), languageFlag: language?.flag };
+      return { ...deck, cardCount, sideboardCount: countSideboard(deck.text), colorSymbols: colorSymbols(deck.colors, cardCount), languageFlag: language?.flag };
     });
   });
 
@@ -130,15 +135,6 @@ export class MyDecks {
       : '';
   });
 
-  constructor() {
-    effect(() => {
-      const first = this.deckService.decks()[0];
-      if (!this.id() && first) {
-        this.router.navigate(['/decks', first.id], { replaceUrl: true });
-      }
-    });
-  }
-
   protected toggleAddCards(): void {
     this.addCardsOpen.update((open) => !open);
     this.addCardsUsed.set(true);
@@ -169,7 +165,7 @@ export class MyDecks {
   }
 
   protected create(): void {
-    const deck = this.deckService.create(this.i18n.translate('decks.defaultName'), '', 'constructed');
+    const deck = this.deckService.create(this.i18n.translate('decks.defaultName'), '', 'commander');
     this.router.navigate(['/decks', deck.id]);
   }
 
@@ -213,8 +209,8 @@ export class MyDecks {
     }
   }
 
-  protected toggleLegality(event: Event): void {
-    this.settings.legalityCheck.set((event.target as HTMLInputElement).checked);
+  protected toggleLegality(id: string, event: Event): void {
+    this.deckService.setLegalityCheck(id, (event.target as HTMLInputElement).checked);
   }
 
   protected setSort(event: Event): void {
@@ -253,6 +249,40 @@ export class MyDecks {
     const menu = this.host.nativeElement.querySelector('.export');
     if (this.exportMenuOpen() && menu && !menu.contains(event.target as Node)) {
       this.exportMenuOpen.set(false);
+    }
+    const bracket = this.host.nativeElement.querySelector('.bracket');
+    if (this.bracketInfoOpen() && bracket && !bracket.contains(event.target as Node)) {
+      this.bracketInfoOpen.set(false);
+    }
+  }
+
+  protected readonly brackets = BRACKETS;
+  protected readonly bracketInfoOpen = signal(false);
+  protected readonly estimating = signal(false);
+  protected readonly bracketEstimate = linkedSignal<string | undefined, BracketEstimate | undefined>({
+    source: this.id,
+    computation: () => undefined,
+  });
+
+  protected bracketLevelKey(bracket: Bracket): TranslationKey {
+    return `bracket.level${bracket}`;
+  }
+
+  // Clicking the selected bracket again clears it.
+  protected setBracket(id: string, current: Bracket | undefined, bracket: Bracket): void {
+    this.deckService.setBracket(id, current === bracket ? undefined : bracket);
+  }
+
+  protected async estimateBracket(id: string): Promise<void> {
+    this.estimating.set(true);
+    try {
+      const entries = this.entries().filter((e) => e.section === 'commander' || e.section === 'companion' || e.section === 'main');
+      const resolved = await firstValueFrom(this.deckCards.resolve(entries, this.deckLanguage()));
+      const estimate = estimateBracket([...resolved.values()].flatMap((r) => (r ? [r.card] : [])));
+      this.bracketEstimate.set(estimate);
+      this.deckService.setBracket(id, estimate.bracket);
+    } finally {
+      this.estimating.set(false);
     }
   }
 

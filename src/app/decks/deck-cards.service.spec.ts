@@ -54,6 +54,24 @@ describe('DeckCardsService', () => {
     await new Promise((resolve) => setTimeout(resolve));
   });
 
+  it('keeps printing searches below the nesting limit of Scryfall', async () => {
+    const entries: DeckEntry[] = Array.from({ length: 25 }, (_, i) => ({
+      count: 1,
+      name: `Card ${i}`,
+      set: 'm21',
+      collectorNumber: String(i + 1),
+      section: 'main',
+    }));
+    service.resolve(entries, 'en').subscribe();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    for (const batch of [entries.slice(0, 18), entries.slice(18)]) {
+      const request = http.expectOne((r) => r.url.endsWith('/cards/search'));
+      expect(request.request.params.get('q')!.match(/\(set:/g)).toHaveLength(batch.length);
+      request.flush(list(batch.map((e) => card(e.name, 'en', e.set, e.collectorNumber))));
+    }
+  });
+
   it('uses cards remembered from a search without asking Scryfall', async () => {
     const shock: DeckEntry = { count: 1, name: 'Shock', set: 'm19', collectorNumber: '156', section: 'main' };
     service.remember(shock, 'de', card('Shock', 'de', 'm19', '156') as never);

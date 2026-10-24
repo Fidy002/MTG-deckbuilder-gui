@@ -1,19 +1,39 @@
 :host {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: var(--space-6);
-  align-items: start;
+  --drawer-width: min(300px, 85vw);
+  --legality-button-top: 96px;
 
-  @media (max-width: 760px) {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  display: block;
 }
 
+// The deck list is a drawer that slides in from the left over the page.
 aside {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  width: var(--drawer-width);
   padding: var(--space-4) 0;
+  overflow-y: auto;
+  border-radius: 0;
+  border-width: 0 var(--line-width) 0 0;
+  box-shadow: 0 0 40px rgb(0 0 0 / 0.7);
+  transform: translateX(-105%);
+  transition: transform var(--accordion-duration) ease;
+
+  &.open {
+    transform: none;
+  }
+
+  .drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-2) 0 var(--space-4);
+  }
 
   .actions {
     display: flex;
@@ -90,6 +110,25 @@ aside {
   }
 }
 
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.sort {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.overview-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: calc(-1 * var(--space-3));
+}
+
 .editor {
   display: flex;
   flex-direction: column;
@@ -114,6 +153,34 @@ aside {
     gap: var(--space-2);
     margin-left: auto;
   }
+}
+
+.deck-card-count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-muted);
+
+  .card-icon {
+    width: var(--deck-color-size);
+    height: var(--deck-color-size);
+    fill: var(--color-surface);
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+  }
+}
+
+.deck-card-count.sideboard {
+  margin-left: calc(-1 * var(--space-2));
+  color: var(--color-sideboard);
+}
+
+.sideboard-text {
+  color: var(--color-sideboard);
 }
 
 .deck-colors {
@@ -194,12 +261,96 @@ aside {
   justify-content: flex-end;
   gap: var(--space-2);
   padding-bottom: var(--space-2);
+}
 
-  .sort {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
+.bracket {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.bracket-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.bracket-help {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.bracket-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-height);
+
+  button {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: var(--radius-md);
+    font-weight: 700;
+    color: var(--color-text-muted);
+
+    &.active {
+      border-color: var(--color-accent);
+      background: var(--color-accent);
+      color: var(--color-bg);
+    }
   }
+}
+
+.bracket-info {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(420px, 90vw);
+  padding: var(--space-4);
+  border-color: var(--color-line-strong);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.7);
+  font-size: var(--text-sm);
+
+  h4 {
+    margin: 0;
+    font-size: var(--text-md);
+  }
+
+  p,
+  ol,
+  ul {
+    margin: 0;
+  }
+
+  ol,
+  ul {
+    padding-left: var(--space-5);
+    color: var(--color-text-muted);
+  }
+
+  li.active {
+    color: var(--color-accent-strong);
+  }
+
+  .primary {
+    align-self: flex-start;
+  }
+}
+
+.bracket-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
 }
 
 .legality-toggle {
@@ -365,6 +516,99 @@ footer {
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+// Red warnings (at the right edge of the screen and before the deck name) open the legality popup.
+.legality-button,
+.title-warning {
+  .warning-fill {
+    fill: var(--color-illegal-glow);
+    stroke: #000;
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+  }
+
+  .warning-mark {
+    fill: none;
+    stroke: #000;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.title-warning {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: none;
+  filter: drop-shadow(0 0 6px rgb(212 44 34 / 0.7));
+
+  &:hover:not(:disabled) {
+    background: none;
+  }
+}
+
+.legality-button {
+  position: fixed;
+  top: var(--legality-button-top);
+  right: var(--space-3);
+  z-index: 55;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: none;
+  background: none;
+  animation: legality-glow 1.6s ease-in-out infinite alternate;
+
+  &:hover:not(:disabled) {
+    background: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    filter: drop-shadow(0 0 8px var(--color-illegal-glow));
+  }
+}
+
+@keyframes legality-glow {
+  from {
+    filter: drop-shadow(0 0 4px rgb(212 44 34 / 0.6));
+  }
+  to {
+    filter: drop-shadow(0 0 14px rgb(212 44 34 / 0.95));
+  }
+}
+
+.legality-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 56;
+}
+
+.legality.legality-popup {
+  position: fixed;
+  top: var(--legality-button-top);
+  right: calc(var(--space-3) + 56px);
+  z-index: 57;
+  width: min(440px, calc(100vw - 96px));
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: var(--space-7);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.7);
+}
+
+.legality-close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  border-color: transparent;
 }
 
 .legality {

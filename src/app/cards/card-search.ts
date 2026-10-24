@@ -103,9 +103,10 @@ export class CardSearch {
       .subscribe((state) => this.state.set(state));
   }
 
-  // In the compact single row the mouse wheel scrolls sideways; the page only scrolls once the row is at its end.
+  // In the compact single row the mouse wheel scrolls sideways, but only if the results are wider than the row;
+  // otherwise the page scrolls as usual.
   protected onRowWheel(event: WheelEvent, row: HTMLElement): void {
-    if (!this.compact() || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+    if (!this.compact() || Math.abs(event.deltaY) <= Math.abs(event.deltaX) || row.scrollWidth <= row.clientWidth) {
       return;
     }
     event.preventDefault();

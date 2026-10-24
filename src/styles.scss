@@ -15,6 +15,7 @@
   --color-danger: #c27b66;
   --color-highlight: #f3ede2;
   --color-illegal-glow: #d42c22;
+  --color-sideboard: #6f9fd8;
   --legal-tag-size: 22px;
   --heading-warning-size: 18px;
   --color-flag-frame: #000;
@@ -96,13 +97,27 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--texture-grain), var(--vignette), var(--color-bg);
-  background-attachment: fixed;
   color: var(--color-text);
   font-family: var(--font-body);
   font-size: var(--text-md);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+// Grain and vignette sit on their own fixed layer: a fixed body background would repaint the whole page,
+// including every filtered card stack, on each scroll step.
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: var(--texture-grain), var(--vignette);
+  pointer-events: none;
+  will-change: transform;
+}
+
+app-root {
+  position: relative;
+  z-index: 1;
 }
 
 h1,

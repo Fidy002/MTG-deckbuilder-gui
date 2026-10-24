@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, DestroyRef, computed, effect, inject, input, linkedSignal, output, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, linkedSignal, output, signal, viewChild } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, debounce, map, of, startWith, switchMap, timer } from 'rxjs';
 import { CardPreview } from '../cards/card-preview';
@@ -23,6 +23,8 @@ const TYPE_ORDER: readonly CardType[] = [
   'creature', 'planeswalker', 'battle', 'instant', 'sorcery', 'artifact', 'enchantment', 'land', 'other',
 ];
 const MAX_MANA_GROUP = 7;
+const DRAG_THRESHOLD_PX = 5;
+const EDGE_GLOW_PULL_PX = 120;
 
 // Card height is 139% of its width; each card in a stack overlaps the previous one by 111% of the width,
 // leaving its title bar plus a strip of art (for the count) visible.
@@ -78,6 +80,8 @@ export class DeckOverview {
   readonly commanderZone = input(false);
   readonly colorsChange = output<string[]>();
   readonly legalityChange = output<LegalityResult | undefined>();
+  // Clicking any warning triangle asks the page to show the legality details.
+  readonly legalityRequested = output<void>();
 
   protected readonly manaSymbolUrl = manaSymbolUrl;
 
@@ -207,12 +211,13 @@ export class DeckOverview {
     const cards = this.cards();
     const commanders = cards.filter((c) => c.entry.section === 'commander');
     const first = commanders[0]?.resolved?.card;
+    const companions = cards.filter((c) => c.entry.section === 'companion');
     const language = this.language();
     return {
       title: deckGroupName('commander', language),
       companionTitle: deckGroupName('companion', language),
       commanders,
-      companions: cards.filter((c) => c.entry.section === 'companion'),
+      companions,
       openSlot: commanders.length === 0 ? ('commander' as const) : commanders.length === 1 && first && allowsSecondCommander(first) ? ('partner' as const) : undefined,
     };
   });
@@ -250,6 +255,16 @@ export class DeckOverview {
     this.updateSelected(card, { section: commander ? 'commander' : 'main' });
   }
 
+  private readonly coverCard = computed(() => this.deckService.decks().find((d) => d.id === this.deckId())?.coverCard);
+
+  protected isCover(card: OverviewCard): boolean {
+    return this.coverCard()?.toLowerCase() === card.entry.name.toLowerCase();
+  }
+
+  protected setCover(card: OverviewCard): void {
+    this.deckService.setCoverCard(this.deckId(), card.entry.name);
+  }
+
   protected setCategory(card: OverviewCard, event: Event): void {
     this.updateSelected(card, { category: cleanCategory((event.target as HTMLInputElement).value) });
   }
@@ -272,6 +287,14 @@ export class DeckOverview {
   });
 
   constructor() {
+    const resize = new ResizeObserver(() => this.measureBleed());
+    effect(() => {
+      const groups = this.board()?.nativeElement.parentElement;
+      if (groups) {
+        resize.observe(groups);
+      }
+    });
+    inject(DestroyRef).onDestroy(() => resize.disconnect());
     effect(() => this.legalityChange.emit(this.legality()));
     inject(DestroyRef).onDestroy(() => this.legalityChange.emit(undefined));
     effect(() => {
@@ -280,6 +303,84 @@ export class DeckOverview {
         this.colorsChange.emit(colors);
       }
     });
+  }
+
+  private readonly board = viewChild<ElementRef<HTMLElement>>('board');
+  // Distances from the board's container to the screen edges; the board reaches over them to both edges.
+  protected readonly boardBleed = signal({ left: 0, right: 0 });
+
+  private measureBleed(): void {
+    const groups = this.board()?.nativeElement.parentElement;
+    if (groups) {
+      const rect = groups.getBoundingClientRect();
+      this.boardBleed.set({
+        left: Math.max(0, rect.left),
+        right: Math.max(0, document.documentElement.clientWidth - rect.right),
+      });
+    }
+  }
+
+  private swallowClick?: (event: Event) => void;
+  protected readonly edgeGlow = signal<{ side: 'left' | 'right'; strength: number } | undefined>(undefined);
+
+  // Dragging anywhere on the board moves it sideways; a click only counts if the pointer barely moved.
+  protected startDrag(event: PointerEvent, board: HTMLElement): void {
+    if (event.button !== 0 || event.pointerType === 'touch') {
+      return;
+    }
+    if (this.swallowClick) {
+      board.removeEventListener('click', this.swallowClick, { capture: true });
+      this.swallowClick = undefined;
+    }
+    const startX = event.clientX;
+    const startLeft = board.scrollLeft;
+    let dragging = false;
+    const move = (e: PointerEvent) => {
+      const dx = e.clientX - startX;
+      if (!dragging && Math.abs(dx) > DRAG_THRESHOLD_PX) {
+        dragging = true;
+        board.setPointerCapture(e.pointerId);
+        board.classList.add('dragging');
+        this.hoverOverlay.hide();
+      }
+      if (dragging) {
+        const target = startLeft - dx;
+        const max = board.scrollWidth - board.clientWidth;
+        board.scrollLeft = target;
+        // Pulling past either end lights up that edge, the brighter the further the pull.
+        const overshoot = target < 0 ? -target : target > max ? target - max : 0;
+        this.edgeGlow.set(overshoot ? { side: target < 0 ? 'left' : 'right', strength: Math.min(1, overshoot / EDGE_GLOW_PULL_PX) } : undefined);
+      }
+    };
+    const end = () => {
+      board.removeEventListener('pointermove', move);
+      board.removeEventListener('pointerup', end);
+      board.removeEventListener('pointercancel', end);
+      this.edgeGlow.set(undefined);
+      if (dragging) {
+        board.classList.remove('dragging');
+        // The click that ends a drag must not open a card.
+        this.swallowClick = (e: Event) => {
+          e.stopPropagation();
+          e.preventDefault();
+          this.swallowClick = undefined;
+        };
+        board.addEventListener('click', this.swallowClick, { capture: true, once: true });
+      }
+    };
+    board.addEventListener('pointermove', move);
+    board.addEventListener('pointerup', end);
+    board.addEventListener('pointercancel', end);
+  }
+
+  protected requestLegality(event: Event): void {
+    event.stopPropagation();
+    this.hoverOverlay.hide();
+    this.legalityRequested.emit();
+  }
+
+  protected hideHover(): void {
+    this.hoverOverlay.hide();
   }
 
   protected open(card: OverviewCard): void {

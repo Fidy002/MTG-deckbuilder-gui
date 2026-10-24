@@ -48,6 +48,7 @@ const TYPE_CATEGORIES = new Set([
 export function parseDecklist(text: string, options: ParseOptions = {}): DeckEntry[] {
   const entries: DeckEntry[] = [];
   let section: DeckSection = 'main';
+  let headerCategory: string | undefined;
   let ignoring = false;
   let sawHeader = false;
   let blankAfterCards = false;
@@ -60,12 +61,13 @@ export function parseDecklist(text: string, options: ParseOptions = {}): DeckEnt
       continue;
     }
 
-    const header = headerOf(line);
+    const header = headerOf(line) ?? commentHeaderOf(line);
     if (header) {
       sawHeader = true;
       ignoring = header === 'ignore';
       if (header !== 'ignore') {
-        section = header;
+        section = typeof header === 'string' ? header : header.section;
+        headerCategory = typeof header === 'string' ? undefined : header.category;
       }
       blankAfterCards = false;
       continue;
@@ -85,6 +87,9 @@ export function parseDecklist(text: string, options: ParseOptions = {}): DeckEnt
 
     const entry = parseCardLine(line, lineSection);
     if (entry) {
+      if (headerCategory && !entry.category && entry.section === 'main') {
+        entry.category = headerCategory;
+      }
       entries.push(entry);
     }
   }
@@ -97,7 +102,34 @@ function headerOf(line: string): DeckSection | 'ignore' | undefined {
     .replace(/:$/, '')
     .replace(/\s+/g, '')
     .toLowerCase();
-  return HEADERS[normalized];
+  // Lists grouped by card type ("Creature", "Instants", ...) have those as headers of the main deck.
+  return HEADERS[normalized] ?? (TYPE_CATEGORIES.has(normalized) ? 'main' : undefined);
+}
+
+// Free-form headers like "//🟢 Main Deck - Card Advantage": the section comes from a keyword,
+// the rest of the text becomes the category of the following main deck cards.
+function commentHeaderOf(line: string): { section: DeckSection; category?: string } | undefined {
+  if (!line.startsWith('//')) {
+    return undefined;
+  }
+  const text = line.slice(2).replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  if (!/\p{L}/u.test(text)) {
+    return undefined;
+  }
+  const lower = text.toLowerCase();
+  const section: DeckSection = lower.includes('commander')
+    ? 'commander'
+    : lower.includes('companion')
+      ? 'companion'
+      : lower.includes('sideboard')
+        ? 'sideboard'
+        : lower.includes('maybe') || lower.includes('considering')
+          ? 'maybeboard'
+          : 'main';
+  const category = cleanCategory(text.replace(/^(?:main\s*deck|mainboard|deck)\s*[-–:]\s*/i, '').replace(/\s+/g, ' '));
+  return section === 'main' && category && !TYPE_CATEGORIES.has(category.toLowerCase()) && !HEADERS[category.toLowerCase().replace(/\s+/g, '')]
+    ? { section, category }
+    : { section };
 }
 
 function parseCardLine(line: string, section: DeckSection): DeckEntry | undefined {

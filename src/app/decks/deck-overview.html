@@ -27,9 +27,24 @@
 </div>
 
 <div class="groups" [class.hidden]="pending()">
+  <div class="edge-glow left" [style.left.px]="-boardBleed().left" [style.opacity]="edgeGlow()?.side === 'left' ? edgeGlow()!.strength : 0"></div>
+  <div class="edge-glow right" [style.right.px]="-boardBleed().right" [style.opacity]="edgeGlow()?.side === 'right' ? edgeGlow()!.strength : 0"></div>
+  <div
+    class="board"
+    #board
+    [style.margin-left.px]="-boardBleed().left"
+    [style.padding-left.px]="boardBleed().left"
+    [style.margin-right.px]="-boardBleed().right"
+    (pointerdown)="startDrag($event, board)"
+    (dragstart)="$event.preventDefault()"
+    (scroll)="hideHover()"
+  >
   @if (zone(); as zone) {
-    <section class="commander-zone" [style.--slots]="zone.commanders.length + zone.companions.length + (zone.openSlot ? 1 : 0)">
-      <h3 class="zone-title">{{ zone.title }}</h3>
+    <section class="group commander-zone" [style.--slots]="zone.commanders.length + zone.companions.length + (zone.openSlot ? 1 : 0)">
+      <h3 class="zone-title">
+        <span>{{ zone.title }}</span>
+      </h3>
+      <div class="zone-frame">
       <div class="zone-cards">
         @for (card of zone.commanders; track card.key) {
           <ng-container *ngTemplateOutlet="zoneCard; context: { $implicit: card, label: zone.commanders.length > 1 && !$first ? 'Partner' : '' }" />
@@ -44,12 +59,15 @@
           <ng-container *ngTemplateOutlet="zoneCard; context: { $implicit: card, label: zone.companionTitle }" />
         }
       </div>
+      </div>
     </section>
   }
-
   @for (group of groups(); track group.id) {
-    <section class="group">
-      <h3 [class.mana-heading]="!!group.manaValue">
+    <section class="group" [class.sideboard]="group.id === 'sideboard'">
+      <h3>
+        @if (groupHasIssues(group)) {
+          <ng-container *ngTemplateOutlet="warningTriangle; context: { $implicit: 'heading-warning' }" />
+        }
         @if (group.manaValue; as mana) {
           <span class="mana-value" [attr.aria-label]="group.title">
             <img [src]="manaSymbolUrl(mana.symbol)" alt="" width="22" height="22" />
@@ -58,12 +76,15 @@
             }
           </span>
         } @else {
-          <span>{{ group.title }}</span>
+          <span [title]="group.title">{{ group.title }}</span>
         }
-        @if (groupHasIssues(group)) {
-          <ng-container *ngTemplateOutlet="warningTriangle; context: { $implicit: 'heading-warning' }" />
-        }
-        <span class="count">{{ group.count }}</span>
+        <span class="count" [attr.aria-label]="'decks.cardCount' | t: { count: group.count }">
+          <svg class="card-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="8" y="3" width="11" height="15" rx="1.5" />
+            <rect x="5" y="6" width="11" height="15" rx="1.5" />
+          </svg>
+          {{ group.count }}
+        </span>
       </h3>
       <div class="stack">
         @for (card of group.cards; track $index) {
@@ -104,6 +125,7 @@
       </div>
     </section>
   }
+  </div>
 </div>
 
 @if (selected(); as card) {
@@ -140,6 +162,9 @@
         <button type="button" (click)="setCommander(card, card.entry.section !== 'commander')">
           {{ (card.entry.section === 'commander' ? 'overview.removeCommander' : 'overview.makeCommander') | t }}
         </button>
+        <button type="button" [disabled]="isCover(card)" (click)="setCover(card)">
+          {{ (isCover(card) ? 'overview.isCover' : 'overview.makeCover') | t }}
+        </button>
         <button type="button" class="remove" (click)="changeCount(card, -card.entry.count)">
           {{ 'overview.remove' | t }}
         </button>
@@ -149,7 +174,7 @@
 }
 
 <ng-template #warningTriangle let-className>
-  <span [class]="className + ' warning-triangle'">
+  <span [class]="className + ' warning-triangle'" (click)="requestLegality($event)" (pointerdown)="$event.stopPropagation()">
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path class="warning-fill" d="M12 2.5 1.5 21h21L12 2.5z" />
       <path class="warning-mark" d="M12 9.5v5.5M12 17.6v.1" />

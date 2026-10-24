@@ -115,16 +115,16 @@ export function checkConstructedLegality(format: string, cards: readonly Checked
 
   const deck = [...main, ...sideboard];
   const copies = countCopies(deck);
+  // One issue per card name, but every line of that card is marked (e.g. two printings of the same card).
+  const copyIssues = new Map<string, LegalityIssue>();
   for (const { key, entry, card } of deck) {
     const name = entry.name.toLowerCase();
     const total = copies.get(name) ?? 0;
     const restricted = card?.legalities?.[format] === 'restricted';
-    if (restricted && total > 1) {
-      report({ kind: 'restricted', name: entry.name, count: total }, key);
-      copies.set(name, 0);
-    } else if (total > MAX_COPIES && !allowsMultipleCopies(entry.name, card)) {
-      report({ kind: 'tooManyCopies', name: entry.name, count: total }, key);
-      copies.set(name, 0);
+    if ((restricted && total > 1) || (total > MAX_COPIES && !allowsMultipleCopies(entry.name, card))) {
+      const issue = copyIssues.get(name) ?? { kind: restricted ? 'restricted' : 'tooManyCopies', name: entry.name, count: total };
+      copyIssues.set(name, issue);
+      report(issue, key);
     }
     if (card && !casual) {
       reportFormatLegality(format, key, entry.name, card, report);
@@ -170,11 +170,14 @@ export function checkCommanderLegality(cards: readonly CheckedCard[]): LegalityR
 
   const copies = countCopies(deck);
 
+  const copyIssues = new Map<string, LegalityIssue>();
   for (const { key, entry, card } of deck) {
-    const total = copies.get(entry.name.toLowerCase()) ?? 0;
+    const name = entry.name.toLowerCase();
+    const total = copies.get(name) ?? 0;
     if (total > 1 && !allowsMultipleCopies(entry.name, card)) {
-      report({ kind: 'notSingleton', name: entry.name, count: total }, key);
-      copies.set(entry.name.toLowerCase(), 0);
+      const issue = copyIssues.get(name) ?? { kind: 'notSingleton', name: entry.name, count: total };
+      copyIssues.set(name, issue);
+      report(issue, key);
     }
     if (!card) {
       continue;

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { DeckService, countCards } from './deck.service';
+import { DeckService, countCards, deckCoverEntry } from './deck.service';
 
 describe('DeckService', () => {
   let service: DeckService;
@@ -11,6 +11,7 @@ describe('DeckService', () => {
 
   it('creates, renames and deletes decks', () => {
     const deck = service.create('Burn');
+    expect(deck.legalityCheck).toBe(false);
     service.rename(deck.id, 'Mono Red Burn');
     expect(service.get(deck.id)?.name).toBe('Mono Red Burn');
 
@@ -24,6 +25,20 @@ describe('DeckService', () => {
     service.addCard(deck.id, { name: 'lightning bolt' });
     service.addCard(deck.id, { name: 'Lava Spike', set: 'm10', collectorNumber: '140' });
     expect(service.get(deck.id)?.text).toBe('4 Lightning Bolt\n20 Mountain\n1 Lava Spike (M10) 140');
+  });
+
+  it('fills up an existing card even when another printing is added', () => {
+    const deck = service.create('Bears');
+    service.updateText(deck.id, '1 Grizzly Bears (M10) 180');
+    service.addCard(deck.id, { name: 'Grizzly Bears', set: 'dmr', collectorNumber: '161' });
+    expect(service.get(deck.id)?.text).toBe('2 Grizzly Bears (M10) 180');
+  });
+
+  it('merges several lines of the same card when another copy is added', () => {
+    const deck = service.create('Bears');
+    service.updateText(deck.id, '1 Grizzly Bears (M10) 180\n1 Forest\n2 Grizzly Bears (DMR) 161');
+    service.addCard(deck.id, { name: 'Grizzly Bears', set: 'dmr', collectorNumber: '161' });
+    expect(service.get(deck.id)?.text).toBe('1 Forest\n4 Grizzly Bears (DMR) 161');
   });
 
   it('adds cards to the main deck, not the sideboard', () => {
@@ -72,5 +87,13 @@ describe('DeckService', () => {
 
   it('counts played cards, without sideboard', () => {
     expect(countCards('4 Lightning Bolt\n2x Shock\n20 Mountain\n\nSideboard\n3 Duress')).toBe(26);
+  });
+
+  it('picks the cover card, then the commander, then the first card', () => {
+    const text = 'Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Goblin Guide\n1 Shock';
+    expect(deckCoverEntry({ text, coverCard: 'shock' })?.name).toBe('Shock');
+    expect(deckCoverEntry({ text })?.name).toBe('Krenko, Mob Boss');
+    expect(deckCoverEntry({ text: '1 Goblin Guide\n1 Shock' })?.name).toBe('Goblin Guide');
+    expect(deckCoverEntry({ text: '' })).toBeUndefined();
   });
 });

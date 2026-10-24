@@ -15,7 +15,8 @@ export function cardKey(entry: Pick<DeckEntry, 'name' | 'set' | 'collectorNumber
 }
 
 const NAMES_PER_QUERY = 40;
-const PRINTS_PER_QUERY = 40;
+// Each printing is its own (set cn) group, and Scryfall rejects searches with 20 or more nested conditions.
+const PRINTS_PER_QUERY = 18;
 
 // Scryfall asks to cache card data for at least 24 hours; gameplay data rarely changes.
 const CARD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
