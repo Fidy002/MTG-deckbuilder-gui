@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Observable, catchError, combineLatest, debounceTime, distinctUntilChanged, map, of, startWith, switchMap } from 'rxjs';
 import { I18nService } from '../i18n/i18n.service';
@@ -14,7 +14,6 @@ import { SetSelect } from './set-select';
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 350;
 const LOAD_MORE_THRESHOLD_PX = 600;
-const GHOST_SLOTS = 10;
 
 type SearchState =
   | { status: 'idle' }
@@ -38,10 +37,12 @@ export class CardSearch {
   readonly language = input<string>();
   readonly picked = output<ScryfallCard>();
 
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly lastResult = signal<CardSearchResult | undefined>(undefined);
+
   private readonly searchLanguage = computed(() => this.language() ?? this.settings.cardLanguage());
 
   protected readonly minQueryLength = MIN_QUERY_LENGTH;
-  protected readonly ghostSlots = Array.from({ length: GHOST_SLOTS }, (_, i) => i);
   protected readonly query = signal('');
   protected readonly selectedSets = signal<string[]>([]);
   protected readonly state = signal<SearchState>({ status: 'idle' });
@@ -58,7 +59,36 @@ export class CardSearch {
     return result?.isFallback ? cardLanguageName(this.searchLanguage(), this.i18n.language()) : undefined;
   });
 
+  // Compact mode: the result row opens with the first results, stays open without results
+  // and folds away again once the search is cleared.
+  protected readonly expanded = signal(false);
+  // While the row folds away, the last results stay rendered so there is something to animate.
+  private readonly collapsingResult = signal<CardSearchResult | undefined>(undefined);
+  private collapseTimer?: ReturnType<typeof setTimeout>;
+  protected readonly shownResult = computed(() => this.result() ?? this.collapsingResult());
+
   constructor() {
+    effect(() => {
+      const state = this.state();
+      if (!this.compact()) {
+        return;
+      }
+      if (state.status === 'idle' && untracked(this.expanded)) {
+        this.collapsingResult.set(untracked(this.lastResult));
+        this.expanded.set(false);
+        clearTimeout(this.collapseTimer);
+        this.collapseTimer = setTimeout(() => this.collapsingResult.set(undefined), this.collapseDuration());
+      } else if (state.status === 'done') {
+        clearTimeout(this.collapseTimer);
+        this.collapsingResult.set(undefined);
+        this.lastResult.set(state.result);
+        if (state.result.cards.length) {
+          this.expanded.set(true);
+        }
+      }
+    });
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.collapseTimer));
+
     const query$ = toObservable(this.query).pipe(
       debounceTime(DEBOUNCE_MS),
       map((q) => q.trim()),
@@ -78,18 +108,19 @@ export class CardSearch {
     if (!this.compact() || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
       return;
     }
-    const atStart = row.scrollLeft <= 0 && event.deltaY < 0;
-    const atEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 1 && event.deltaY > 0;
-    if (!atStart && !atEnd) {
-      event.preventDefault();
-      row.scrollLeft += event.deltaY;
-    }
+    event.preventDefault();
+    row.scrollLeft += event.deltaY;
   }
 
   protected onRowScroll(row: HTMLElement): void {
     if (this.compact() && row.scrollLeft + row.clientWidth >= row.scrollWidth - LOAD_MORE_THRESHOLD_PX) {
       this.loadMore();
     }
+  }
+
+  private collapseDuration(): number {
+    const value = getComputedStyle(this.host.nativeElement).getPropertyValue('--results-expand-duration');
+    return (parseFloat(value) || 600) + 50;
   }
 
   protected onInput(event: Event): void {

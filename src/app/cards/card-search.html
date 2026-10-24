@@ -6,7 +6,7 @@
       autocomplete="off"
       [value]="query()"
       (input)="onInput($event)"
-      [placeholder]="'search.placeholder' | t"
+      [placeholder]="(compact() ? 'search.compactHint' : 'search.placeholder') | t"
     />
   </label>
   <app-set-select class="sets" [(selected)]="selectedSets" />
@@ -27,7 +27,7 @@
     }
   }
 
-  @if (result(); as result) {
+  @if (shownResult(); as result) {
     @if (fallbackLanguage(); as language) {
       <p class="notice">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>
@@ -35,23 +35,21 @@
       </p>
     }
     @if (result.cards.length === 0) {
-      <p class="status">{{ 'search.noResults' | t }}</p>
+      @if (!compact()) {
+        <p class="status">{{ 'search.noResults' | t }}</p>
+      }
     } @else {
       <p class="status">{{ 'search.resultCount' | t: { count: result.totalCards } }}</p>
     }
   }
 </div>
 
-<div class="results">
-  @if (compact() && !result()?.cards?.length) {
-    <div class="ghost-row" aria-hidden="true">
-      @for (slot of ghostSlots; track slot) {
-        <span class="ghost-card"></span>
-      }
-      <span class="ghost-hint caps-label">{{ 'search.compactHint' | t }}</span>
-    </div>
+<div class="results" [class.expanded]="expanded()">
+  <div class="results-inner">
+  @if (compact() && shownResult()?.cards?.length === 0) {
+    <p class="status empty-results">{{ 'search.noResults' | t }}</p>
   }
-  @if (result(); as result) {
+  @if (shownResult(); as result) {
     @if (result.cards.length) {
       <div class="grid" #row (wheel)="onRowWheel($event, row)" (scroll)="onRowScroll(row)">
         @for (card of result.cards; track card.id) {
@@ -66,6 +64,7 @@
       }
     }
   }
+  </div>
 </div>
 
 @if (selectedCard(); as card) {
