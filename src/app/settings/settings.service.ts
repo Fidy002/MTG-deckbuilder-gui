@@ -11,6 +11,7 @@ interface StoredSettings {
   uiLanguage?: string;
   cardLanguage?: string;
   deckSort?: DeckSort;
+  legalityCheck?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -29,12 +30,15 @@ export class SettingsService {
     DECK_SORTS.includes(this.stored.deckSort as DeckSort) ? this.stored.deckSort! : 'category',
   );
 
+  readonly legalityCheck = signal(this.stored.legalityCheck ?? true);
+
   constructor() {
     effect(() => {
       const settings: StoredSettings = {
         uiLanguage: this.uiLanguage(),
         cardLanguage: this.cardLanguage(),
         deckSort: this.deckSort(),
+        legalityCheck: this.legalityCheck(),
       };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));

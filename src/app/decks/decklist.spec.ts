@@ -1,5 +1,5 @@
 import { DECK_EXPORT_FORMATS } from './deck-formats';
-import { DeckEntry, parseDecklist, serializeDecklist } from './decklist';
+import { DeckEntry, detectFormat, parseDecklist, serializeDecklist } from './decklist';
 
 const exportAs = (id: string, entries: DeckEntry[]) => DECK_EXPORT_FORMATS.find((f) => f.id === id)!.export(entries);
 
@@ -99,5 +99,24 @@ describe('export formats', () => {
           : entries.map((e) => [e.count, e.name]),
       );
     }
+  });
+});
+
+describe('detectFormat', () => {
+  const singles = (count: number) =>
+    Array.from({ length: count }, (_, i): DeckEntry => ({ count: 1, name: `Card ${i}`, section: 'main' }));
+
+  it('recognises a marked commander', () => {
+    expect(detectFormat([{ count: 1, name: 'Krenko, Mob Boss', section: 'commander' }, ...singles(10)])).toBe('commander');
+  });
+
+  it('recognises an unmarked 100 card singleton list with basic lands', () => {
+    expect(detectFormat([...singles(70), { count: 30, name: 'Mountain', section: 'main' }])).toBe('commander');
+  });
+
+  it('treats 60 card and larger non-singleton decks as constructed', () => {
+    expect(detectFormat([{ count: 4, name: 'Lightning Bolt', section: 'main' }, { count: 56, name: 'Mountain', section: 'main' }])).toBe('constructed');
+    expect(detectFormat([{ count: 4, name: 'Shock', section: 'main' }, ...singles(96)])).toBe('constructed');
+    expect(detectFormat(singles(75))).toBe('constructed');
   });
 });

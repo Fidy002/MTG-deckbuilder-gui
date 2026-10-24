@@ -69,6 +69,11 @@
                 @if (card.resolved && !card.resolved.localized) {
                   <span class="lang-tag" [title]="'overview.notLocalized' | t: { language: languageName() }">EN</span>
                 }
+                @if (legality()?.cardIssues?.get(card.key); as issues) {
+                  <span class="legal-tag" [title]="issueTitle(issues)">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z" /><path d="M12 10v5M12 18h.01" /></svg>
+                  </span>
+                }
               </span>
             </app-card-hover>
           </button>

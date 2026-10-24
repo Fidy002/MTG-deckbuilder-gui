@@ -1,5 +1,5 @@
 import { Injectable, effect, signal } from '@angular/core';
-import { DeckEntry, countEntries, isSameCard, parseDecklist, serializeDecklist } from './decklist';
+import { DeckEntry, DeckFormat, countEntries, isSameCard, parseDecklist, serializeDecklist } from './decklist';
 
 const STORAGE_KEY = 'mtg-deckbuilder.decks';
 
@@ -8,6 +8,7 @@ export interface Deck {
   name: string;
   text: string;
   language?: string;
+  format?: DeckFormat;
   colors?: string[];
   createdAt: string;
   updatedAt: string;
@@ -43,9 +44,9 @@ export class DeckService {
     return this.state().find((deck) => deck.id === id);
   }
 
-  create(name: string, text = ''): Deck {
+  create(name: string, text = '', format?: DeckFormat): Deck {
     const now = new Date().toISOString();
-    const deck: Deck = { id: crypto.randomUUID(), name, text, createdAt: now, updatedAt: now };
+    const deck: Deck = { id: crypto.randomUUID(), name, text, ...(format && { format }), createdAt: now, updatedAt: now };
     this.state.update((decks) => [deck, ...decks]);
     return deck;
   }
@@ -56,6 +57,10 @@ export class DeckService {
 
   updateText(id: string, text: string): void {
     this.patch(id, { text });
+  }
+
+  setFormat(id: string, format: DeckFormat): void {
+    this.patch(id, { format });
   }
 
   setLanguage(id: string, language: string | undefined): void {
@@ -120,7 +125,7 @@ export class DeckService {
     this.updateText(id, serializeDecklist(entries));
   }
 
-  private patch(id: string, changes: Partial<Pick<Deck, 'name' | 'text' | 'language'>>): void {
+  private patch(id: string, changes: Partial<Pick<Deck, 'name' | 'text' | 'language' | 'format'>>): void {
     const updatedAt = new Date().toISOString();
     this.state.update((decks) =>
       decks

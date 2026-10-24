@@ -35,7 +35,7 @@
 <section class="editor">
   @if (deck(); as deck) {
     <div class="title-row">
-      <label class="name-field">
+      <label class="name-field" [attr.data-value]="deck.name || ('decks.untitled' | t)">
         <span class="visually-hidden">{{ 'decks.name' | t }}</span>
         <input
           type="text"
@@ -52,6 +52,48 @@
           }
         </span>
       }
+      <div class="title-actions">
+        <button
+          type="button"
+          class="icon-button"
+          [title]="'import.button' | t"
+          [attr.aria-label]="'import.button' | t"
+          (click)="importMode.set('replace')"
+        >
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+        </button>
+
+        <div class="export">
+          <button
+            type="button"
+            class="icon-button"
+            aria-haspopup="menu"
+            [title]="'export.button' | t"
+            [attr.aria-label]="'export.button' | t"
+            [attr.aria-expanded]="exportMenuOpen()"
+            [disabled]="entries().length === 0"
+            (click)="exportMenuOpen.set(!exportMenuOpen())"
+          >
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M5 20h14" /></svg>
+          </button>
+          @if (exportMenuOpen()) {
+            <div class="menu panel" role="menu">
+              <p class="caps-label menu-hint">{{ 'export.hint' | t }}</p>
+              @for (format of exportFormats; track format.id) {
+                <button type="button" role="menuitem" (click)="export(format)">{{ format.label }}</button>
+              }
+            </div>
+          }
+        </div>
+        <app-language-select
+          class="deck-language"
+          [iconOnly]="true"
+          [label]="'decks.language' | t"
+          [options]="deckLanguageOptions()"
+          [value]="deckLanguageValue()"
+          (valueChange)="setDeckLanguage(deck.id, $event)"
+        />
+      </div>
     </div>
 
     <div class="toolbar">
@@ -64,7 +106,22 @@
         </button>
       </div>
 
-      <span class="spacer"></span>
+      <div class="toolbar-actions">
+      <label class="sort">
+        <span class="caps-label">{{ 'decks.format' | t }}</span>
+        <select (change)="setFormat(deck.id, $event)">
+          @for (option of formatOptions; track option.value) {
+            <option [value]="option.value" [selected]="option.value === deckFormat()">{{ option.label | t }}</option>
+          }
+        </select>
+      </label>
+
+      @if (deckFormat() === 'commander') {
+        <label class="legality-toggle">
+          <input type="checkbox" role="switch" [checked]="legalityCheck()" (change)="toggleLegality($event)" />
+          <span>{{ 'decks.legalityToggle' | t }}</span>
+        </label>
+      }
 
       @if (view() === 'overview') {
         <label class="sort">
@@ -76,36 +133,6 @@
           </select>
         </label>
       }
-
-      <app-language-select
-        class="deck-language"
-        [label]="'decks.language' | t"
-        [options]="deckLanguageOptions()"
-        [value]="deckLanguageValue()"
-        (valueChange)="setDeckLanguage(deck.id, $event)"
-      />
-
-      <button type="button" (click)="importMode.set('replace')">{{ 'import.button' | t }}</button>
-
-      <div class="export">
-        <button
-          type="button"
-          aria-haspopup="menu"
-          [attr.aria-expanded]="exportMenuOpen()"
-          [disabled]="entries().length === 0"
-          (click)="exportMenuOpen.set(!exportMenuOpen())"
-        >
-          {{ 'export.button' | t }}
-          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-        </button>
-        @if (exportMenuOpen()) {
-          <div class="menu panel" role="menu">
-            <p class="caps-label menu-hint">{{ 'export.hint' | t }}</p>
-            @for (format of exportFormats; track format.id) {
-              <button type="button" role="menuitem" (click)="export(format)">{{ format.label }}</button>
-            }
-          </div>
-        }
       </div>
     </div>
 
@@ -118,6 +145,27 @@
         }
         {{ toast.key | t: toast.params }}
       </p>
+    }
+
+    @if (legality(); as legality) {
+      <section class="legality" [class.ok]="!legality.issues.length" aria-live="polite">
+        <p class="legality-title">
+          @if (legality.issues.length) {
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z" /><path d="M12 10v5M12 18h.01" /></svg>
+            {{ 'legality.title' | t }} · {{ 'legality.problems' | t: { count: legality.issues.length } }}
+          } @else {
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
+            {{ 'legality.title' | t }} · {{ 'legality.ok' | t }}
+          }
+        </p>
+        @if (legality.issues.length) {
+          <ul>
+            @for (issue of legality.issues; track $index) {
+              <li>{{ issueKey(issue) | t: issueParams(issue) }}</li>
+            }
+          </ul>
+        }
+      </section>
     }
 
     <section class="add-cards panel" [class.open]="addCardsOpen()">
@@ -141,7 +189,9 @@
         [language]="deckLanguage()"
         [deckId]="deck.id"
         [sort]="sort()"
+        [legalityCheck]="deckFormat() === 'commander' && legalityCheck()"
         (colorsChange)="setDeckColors(deck.id, $event)"
+        (legalityChange)="legality.set($event)"
       />
     } @else {
       <label class="list-field">

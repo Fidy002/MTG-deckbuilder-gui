@@ -11,9 +11,10 @@ import { cardLanguageOptions } from '../settings/language-settings';
 import { DeckSort, SettingsService } from '../settings/settings.service';
 import { DECK_EXPORT_FORMATS, DeckExportFormat } from './deck-formats';
 import { DeckOverview } from './deck-overview';
+import { LegalityResult, legalityIssueKey, legalityIssueParams } from './commander-legality';
 import { DeckCardsService, cardKey } from './deck-cards.service';
 import { DeckService, countCards } from './deck.service';
-import { countEntries, parseDecklist } from './decklist';
+import { DeckFormat, countEntries, detectFormat, parseDecklist } from './decklist';
 import { ImportDialog } from './import-dialog';
 
 type View = 'overview' | 'text';
@@ -56,6 +57,11 @@ export class MyDecks {
   protected readonly view = signal<View>('overview');
   protected readonly manaSymbolUrl = manaSymbolUrl;
   protected readonly sort = this.settings.deckSort.asReadonly();
+  protected readonly legalityCheck = this.settings.legalityCheck.asReadonly();
+  protected readonly formatOptions: { value: DeckFormat; label: TranslationKey }[] = [
+    { value: 'commander', label: 'decks.formatCommander' },
+    { value: 'constructed', label: 'decks.formatConstructed' },
+  ];
   protected readonly sortOptions: { value: DeckSort; label: TranslationKey }[] = [
     { value: 'category', label: 'decks.sortCategory' },
     { value: 'type', label: 'decks.sortType' },
@@ -66,6 +72,9 @@ export class MyDecks {
   protected readonly importMode = signal<'new' | 'replace' | undefined>(undefined);
   protected readonly toast = signal<Toast | undefined>(undefined);
   protected readonly addCardsOpen = signal(false);
+  protected readonly legality = signal<LegalityResult | undefined>(undefined);
+  protected readonly issueKey = legalityIssueKey;
+  protected readonly issueParams = legalityIssueParams;
   protected readonly addCardsUsed = signal(false);
   private toastTimer?: ReturnType<typeof setTimeout>;
 
@@ -87,6 +96,8 @@ export class MyDecks {
   protected readonly deck = computed(() => this.decks().find((deck) => deck.id === this.id()));
 
   protected readonly entries = computed(() => parseDecklist(this.deck()?.text ?? ''));
+  // Decks saved before formats existed fall back to the detection used on import.
+  protected readonly deckFormat = computed(() => this.deck()?.format ?? detectFormat(this.entries()));
   protected readonly sideboardCount = computed(() => countEntries(this.entries(), ['sideboard']));
 
   protected readonly deckLanguage = computed(() => this.deck()?.language ?? this.settings.cardLanguage());
@@ -148,7 +159,7 @@ export class MyDecks {
   }
 
   protected create(): void {
-    const deck = this.deckService.create(this.i18n.translate('decks.defaultName'));
+    const deck = this.deckService.create(this.i18n.translate('decks.defaultName'), '', 'constructed');
     this.router.navigate(['/decks', deck.id]);
   }
 
@@ -172,6 +183,14 @@ export class MyDecks {
     this.deckService.setColors(id, colors);
   }
 
+  protected setFormat(id: string, event: Event): void {
+    this.deckService.setFormat(id, (event.target as HTMLSelectElement).value as DeckFormat);
+  }
+
+  protected toggleLegality(event: Event): void {
+    this.settings.legalityCheck.set((event.target as HTMLInputElement).checked);
+  }
+
   protected setSort(event: Event): void {
     this.settings.deckSort.set((event.target as HTMLSelectElement).value as DeckSort);
   }
@@ -182,10 +201,12 @@ export class MyDecks {
 
   protected onImported(text: string): void {
     const current = this.deck();
+    const format = detectFormat(parseDecklist(text));
     if (this.importMode() === 'replace' && current) {
       this.deckService.updateText(current.id, text);
+      this.deckService.setFormat(current.id, format);
     } else {
-      const deck = this.deckService.create(this.i18n.translate('decks.importedName'), text);
+      const deck = this.deckService.create(this.i18n.translate('decks.importedName'), text, format);
       this.router.navigate(['/decks', deck.id]);
     }
     this.importMode.set(undefined);

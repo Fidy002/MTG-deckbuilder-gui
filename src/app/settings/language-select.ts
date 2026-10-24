@@ -12,23 +12,37 @@ export interface LanguageOption {
   selector: 'app-language-select',
   imports: [Flag, NgTemplateOutlet],
   host: {
+    '[class.icon-only]': 'iconOnly()',
     '(document:click)': 'onDocumentClick($event)',
     '(document:keydown.escape)': 'open.set(false)',
   },
   template: `
-    <span class="caps-label">{{ label() }}</span>
+    <span class="caps-label" [class.visually-hidden]="iconOnly()">{{ label() }}</span>
     <button
       type="button"
       class="trigger"
       aria-haspopup="listbox"
       [attr.aria-expanded]="open()"
       [attr.aria-label]="label() + ': ' + (selected()?.label ?? '')"
+      [title]="iconOnly() ? label() + ': ' + (selected()?.label ?? '') : ''"
       (click)="open.set(!open())"
     >
       @if (selected(); as option) {
-        <ng-container *ngTemplateOutlet="optionContent; context: { $implicit: option }" />
+        @if (iconOnly()) {
+          @if (option.flag) {
+            <app-flag [code]="option.flag" />
+          } @else {
+            <svg class="icon globe" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z" />
+            </svg>
+          }
+        } @else {
+          <ng-container *ngTemplateOutlet="optionContent; context: { $implicit: option }" />
+        }
       }
-      <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      @if (!iconOnly()) {
+        <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      }
     </button>
 
     @if (open()) {
@@ -84,12 +98,18 @@ export interface LanguageOption {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    :host(.icon-only) .trigger {
+      justify-content: center;
+      width: var(--control-height);
+      min-width: 0;
+      padding: 0;
+    }
     .dropdown {
       position: absolute;
       top: 100%;
       right: 0;
       z-index: 30;
-      min-width: 100%;
+      min-width: max(100%, 12rem);
       max-height: 360px;
       margin: var(--space-1) 0 0;
       padding: var(--space-1) 0;
@@ -121,6 +141,7 @@ export class LanguageSelect {
   readonly label = input.required<string>();
   readonly options = input.required<LanguageOption[]>();
   readonly value = model.required<string>();
+  readonly iconOnly = input(false);
 
   protected readonly open = signal(false);
   protected readonly selected = computed(() => this.options().find((o) => o.code === this.value()));

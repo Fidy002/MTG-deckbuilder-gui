@@ -195,3 +195,13 @@ h3 {
     height: var(--mana-symbol-size);
   }
 }
+
+.legal-tag {
+  display: grid;
+  place-items: center;
+  padding: 1px;
+  border: var(--line-width) solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: var(--color-counter-fill);
+  color: var(--color-danger);
+}

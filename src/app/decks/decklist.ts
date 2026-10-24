@@ -214,3 +214,20 @@ export function isSameCard(a: DeckEntry, b: DeckEntry): boolean {
 export function countEntries(entries: readonly DeckEntry[], sections: readonly DeckSection[]): number {
   return entries.filter((e) => sections.includes(e.section)).reduce((sum, e) => sum + e.count, 0);
 }
+
+export type DeckFormat = 'commander' | 'constructed';
+
+const BASIC_LANDS = new Set(
+  ['plains', 'island', 'swamp', 'mountain', 'forest', 'wastes'].flatMap((name) => [name, `snow-covered ${name}`]),
+);
+
+// A marked commander decides; otherwise a ~100 card singleton list (basic lands excepted) is treated as Commander.
+export function detectFormat(entries: readonly DeckEntry[]): DeckFormat {
+  if (entries.some((e) => e.section === 'commander')) {
+    return 'commander';
+  }
+  const played = entries.filter((e) => e.section === 'main' || e.section === 'companion');
+  const total = countEntries(played, ['main', 'companion']);
+  const singleton = played.every((e) => e.count === 1 || BASIC_LANDS.has(e.name.toLowerCase()));
+  return total >= 98 && total <= 101 && singleton ? 'commander' : 'constructed';
+}

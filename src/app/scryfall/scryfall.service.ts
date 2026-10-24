@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, defer, map, of, shareReplay, switchMap, tap, throwError } from 'rxjs';
 import { SCRYFALL_API_URL as API_URL } from './scryfall-rate-limit';
 import { CardSearchResult, ScryfallCard, ScryfallList, ScryfallSet } from './scryfall.models';
+import { preserveDiacritics } from './search-query';
 
 const SETS_STORAGE_KEY = 'mtg-deckbuilder.sets';
 const SETS_TTL_MS = 24 * 60 * 60 * 1000;
@@ -16,11 +17,12 @@ export class ScryfallService {
   private readonly printingCache = new Map<string, ScryfallCard | undefined>();
 
   searchCards(query: string, language: string, setCodes: readonly string[] = []): Observable<CardSearchResult> {
-    const fullQuery = [query && `(${query})`, setCodes.length && `(${setCodes.map((code) => `set:${code}`).join(' or ')})`]
-      .filter(Boolean)
-      .join(' ');
+    const withSets = (q: string) =>
+      [q && `(${q})`, setCodes.length && `(${setCodes.map((code) => `set:${code}`).join(' or ')})`].filter(Boolean).join(' ');
+    const fullQuery = withSets(query);
+    const localizedQuery = language === 'en' ? fullQuery : withSets(preserveDiacritics(query));
 
-    return this.searchInLanguage(fullQuery, language).pipe(
+    return this.searchInLanguage(localizedQuery, language).pipe(
       switchMap((result) =>
         result.cards.length === 0 && language !== 'en'
           ? this.searchInLanguage(fullQuery, 'en').pipe(

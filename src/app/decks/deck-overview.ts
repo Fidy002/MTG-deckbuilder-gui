@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, linkedSignal, output, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, linkedSignal, output, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, debounce, map, of, startWith, switchMap, timer } from 'rxjs';
 import { CardPreview } from '../cards/card-preview';
@@ -10,6 +10,7 @@ import { DeckSort } from '../settings/settings.service';
 import { CardHover } from '../shared/card-hover/card-hover';
 import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.service';
 import { AUTO_CATEGORIES, autoCategory } from './auto-categories';
+import { LegalityIssue, LegalityResult, checkCommanderLegality, legalityIssueKey, legalityIssueParams } from './commander-legality';
 import { DeckCardsService, ResolvedCard, cardKey } from './deck-cards.service';
 import { DeckGroupId, deckGroupName, manaValueGroupName } from './deck-group-names';
 import { DeckService, EntryChanges } from './deck.service';
@@ -69,7 +70,9 @@ export class DeckOverview {
   readonly language = input.required<string>();
   readonly deckId = input.required<string>();
   readonly sort = input.required<DeckSort>();
+  readonly legalityCheck = input(false);
   readonly colorsChange = output<string[]>();
+  readonly legalityChange = output<LegalityResult | undefined>();
 
   protected readonly manaSymbolUrl = manaSymbolUrl;
 
@@ -223,6 +226,8 @@ export class DeckOverview {
   });
 
   constructor() {
+    effect(() => this.legalityChange.emit(this.legality()));
+    inject(DestroyRef).onDestroy(() => this.legalityChange.emit(undefined));
     effect(() => {
       const colors = this.colors();
       if (colors) {
@@ -245,6 +250,20 @@ export class DeckOverview {
   private updateSelected(card: OverviewCard, changes: EntryChanges): void {
     this.deckService.updateEntry(this.deckId(), card.entry, changes);
     this.selected.set({ ...card, entry: { ...card.entry, ...changes } });
+  }
+
+  protected readonly legality = computed(() => {
+    if (!this.legalityCheck() || this.pending()) {
+      return undefined;
+    }
+    const resolved = this.resolved();
+    return checkCommanderLegality(
+      this.entries().map((entry) => ({ key: cardKey(entry), entry, card: resolved.get(cardKey(entry))?.card ?? undefined })),
+    );
+  });
+
+  protected issueTitle(issues: readonly LegalityIssue[]): string {
+    return issues.map((issue) => this.i18n.translate(legalityIssueKey(issue), legalityIssueParams(issue))).join('\n');
   }
 
   protected readonly notFound = computed(() => {

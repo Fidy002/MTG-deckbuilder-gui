@@ -35,6 +35,8 @@ export interface ScryfallCard {
   rarity: ScryfallRarity;
   cmc?: number;
   color_identity?: string[];
+  keywords?: string[];
+  legalities?: Record<string, 'legal' | 'not_legal' | 'banned' | 'restricted'>;
   mana_cost?: string;
   type_line?: string;
   printed_type_line?: string;

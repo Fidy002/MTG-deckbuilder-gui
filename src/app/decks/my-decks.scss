@@ -102,9 +102,17 @@ aside {
   align-items: center;
   gap: var(--space-4);
 
+  // The name field is only as wide as the name, so the color symbols sit right behind the title.
   .name-field {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
+  }
+
+  .title-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
   }
 }
 
@@ -119,51 +127,90 @@ aside {
   }
 }
 
-.name-input {
-  width: 100%;
-  height: auto;
-  padding: var(--space-1) var(--space-2);
+// The field takes the width of an invisible copy of the name (same font and padding), so it is exactly as wide
+// as the text; longer names shrink the field and end in an ellipsis until the field is focused.
+.name-field {
+  display: grid;
+  grid-template-columns: minmax(0, max-content);
   margin-left: calc(-1 * var(--space-2));
-  border-color: transparent;
+
+  &::after {
+    content: attr(data-value);
+    grid-area: 1 / 1;
+    height: 0;
+    overflow: hidden;
+    min-width: 4ch;
+    visibility: hidden;
+    white-space: pre;
+  }
+
+  &::after,
+  .name-input {
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+    border: var(--line-width) solid transparent;
+    font-family: var(--font-deck-name);
+    font-size: var(--text-2xl);
+    letter-spacing: var(--tracking-caps);
+    line-height: 1.2;
+  }
+}
+
+// Width 0 keeps the input out of the size calculation; min-width then stretches it over the measured column.
+.name-input {
+  grid-area: 1 / 1;
+  width: 0;
+  min-width: 100%;
+  height: auto;
   background: transparent;
-  font-family: var(--font-deck-name);
-  font-size: var(--text-2xl);
-  letter-spacing: var(--tracking-caps);
-  line-height: 1.2;
+  text-overflow: ellipsis;
 
   &:hover,
   &:focus {
     border-color: var(--color-line-strong);
   }
+
+  &:focus {
+    text-overflow: clip;
+  }
 }
 
+// Two columns: view tabs on the left, all deck controls on the right (wrapping within their own column).
 .toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-2);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-2) var(--space-5);
   border-bottom: var(--line-width) solid var(--color-line);
 
   .tab-bar {
     margin-bottom: calc(-1 * var(--line-width));
   }
+}
 
-  .spacer {
-    flex: 1;
-  }
-
-  > button,
-  .export,
-  .deck-language,
-  .sort {
-    margin-bottom: var(--space-2);
-  }
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
 
   .sort {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
   }
+}
+
+.legality-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
 }
 
 .export {
@@ -198,10 +245,34 @@ aside {
 }
 
 .toast {
+  position: fixed;
+  bottom: var(--space-5);
+  left: var(--space-5);
+  z-index: 50;
+  max-width: calc(100vw - 2 * var(--space-5));
+  padding: var(--space-3) var(--space-4);
+  border: var(--line-width) solid var(--color-line-strong);
+  border-left: var(--accent-stroke) solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.6);
+  font-size: var(--text-sm);
   color: var(--color-text);
+  animation: toast-in 200ms ease-out;
 
-  &.error .icon {
-    color: var(--color-danger);
+  &.error {
+    border-left-color: var(--color-danger);
+
+    .icon {
+      color: var(--color-danger);
+    }
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-3));
   }
 }
 
@@ -294,4 +365,49 @@ footer {
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+.legality {
+  padding: var(--space-3) var(--space-4);
+  border: var(--line-width) solid var(--color-line);
+  border-left: var(--accent-stroke) solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+
+  &.ok {
+    border-left-color: var(--color-accent);
+  }
+
+  ul {
+    margin: var(--space-2) 0 0;
+    padding-left: var(--space-5);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+}
+
+.legality-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-weight: 600;
+
+  .icon {
+    color: var(--color-danger);
+  }
+
+  .ok & .icon {
+    color: var(--color-accent);
+  }
+}
+
+.icon-button {
+  width: var(--control-height);
+  padding: 0;
+
+  .icon {
+    width: 18px;
+    height: 18px;
+  }
 }
