@@ -60,6 +60,11 @@ export class ScryfallService {
     );
   }
 
+  /** All creature types (Scryfall catalog), fetched once per session. */
+  readonly creatureTypes$: Observable<string[]> = defer(() =>
+    this.http.get<{ data: string[] }>(`${API_URL}/catalog/creature-types`).pipe(map((catalog) => catalog.data)),
+  ).pipe(shareReplay({ bufferSize: 1, refCount: false }));
+
   /** First page of a search, most played cards first (EDHREC rank). */
   findPopularCards(query: string): Observable<ScryfallCard[]> {
     const params = new HttpParams().set('q', query).set('unique', 'cards').set('order', 'edhrec');

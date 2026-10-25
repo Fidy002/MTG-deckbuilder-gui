@@ -119,7 +119,7 @@ export const en = {
     withoutCommander: 'Continue without commander',
     ownedCount: '{{count}} own cards recognised',
     suggestionsTitle: 'Suggested cards',
-    suggestionsHint: 'The most played cards in your colors that fit the chosen level. Click cards to deselect or select them again ({{count}} selected). Free slots are filled with basic lands.',
+    suggestionsHint: 'The most played cards in your colors that fit the chosen level – cards from the sets of your own cards first. Click cards to deselect or select them again ({{count}} selected). Free slots are filled with basic lands.',
     role: {
       ramp: 'Ramp',
       draw: 'Card advantage',
@@ -128,6 +128,7 @@ export const en = {
       creatures: 'Creatures',
       lands: 'Lands',
     },
+    forTypes: 'matching {{types}}',
     create: 'Create deck',
     back: 'Back',
     next: 'Next',

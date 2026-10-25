@@ -19,9 +19,12 @@ import {
   SuggestionGroup,
   SuggestionRole,
   basicLands,
+  deckCreatureTypes,
+  preferredSets,
 } from './deck-suggestions';
 import { DeckService } from './deck.service';
 import { DeckEntry, DeckFormat, parseDecklist, serializeDecklist } from './decklist';
+import { ScryfallService } from '../scryfall/scryfall.service';
 
 type Step = 'format' | 'level' | 'cards' | 'colors' | 'commander' | 'suggestions';
 
@@ -51,6 +54,7 @@ export class DeckWizard {
   private readonly settings = inject(SettingsService);
   private readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
+  private readonly scryfall = inject(ScryfallService);
 
   protected readonly manaSymbolUrl = manaSymbolUrl;
   protected readonly brackets = BRACKETS;
@@ -63,6 +67,7 @@ export class DeckWizard {
   protected readonly ownedText = signal('');
   protected readonly owned = signal<OwnedCard[]>([]);
   protected readonly colors = signal<string[]>([]);
+  private readonly ownedColors = signal<string[]>([]);
   protected readonly commanderOptions = signal<ScryfallCard[]>([]);
   protected readonly commander = signal<ScryfallCard | undefined>(undefined);
   protected readonly groups = signal<SuggestionGroup[]>([]);
@@ -73,6 +78,12 @@ export class DeckWizard {
   protected readonly step = signal<Step>('format');
   protected readonly steps = computed(() => (this.format() === 'commander' ? COMMANDER_STEPS : CONSTRUCTED_STEPS));
   protected readonly stepIndex = computed(() => this.steps().indexOf(this.step()));
+
+  protected readonly preferredSets = computed(() =>
+    preferredSets(
+      this.owned().map((o) => ({ set: o.entry.set ?? o.card?.set, basic: !!o.card?.type_line?.startsWith('Basic') })),
+    ),
+  );
 
   protected readonly notFound = computed(() => this.owned().filter((o) => !o.card).map((o) => o.entry.name));
   protected readonly ownedCount = computed(() => this.owned().reduce((sum, o) => sum + o.entry.count, 0));
@@ -181,7 +192,8 @@ export class DeckWizard {
       });
       this.owned.set(owned);
       const identity = new Set(owned.flatMap((o) => o.card?.color_identity ?? []));
-      this.colors.set(COLOR_ORDER.filter((c) => identity.has(c)));
+      this.ownedColors.set(COLOR_ORDER.filter((c) => identity.has(c)));
+      this.colors.set(this.ownedColors());
 
       if (this.format() === 'commander') {
         const marked = owned.find((o) => o.entry.section === 'commander' && o.card)?.card;
@@ -195,11 +207,14 @@ export class DeckWizard {
     });
   }
 
-  protected async chooseCommander(card: ScryfallCard | undefined): Promise<void> {
+  // Clicking selects (or deselects) the commander; the suggestions only load on "next".
+  protected selectCommander(card: ScryfallCard): void {
+    this.commander.set(this.commander()?.name === card.name ? undefined : card);
+  }
+
+  protected async continueWithCommander(card: ScryfallCard | undefined): Promise<void> {
     this.commander.set(card);
-    if (card) {
-      this.colors.set(COLOR_ORDER.filter((c) => card.color_identity?.includes(c)));
-    }
+    this.colors.set(card ? COLOR_ORDER.filter((c) => card.color_identity?.includes(c)) : this.ownedColors());
     await this.loadSuggestions();
   }
 
@@ -207,6 +222,7 @@ export class DeckWizard {
     await this.run(async () => {
       const ownedCards = this.owned().flatMap((o) => (o.card ? [o.card] : []));
       const commander = this.commander();
+      const catalog = await firstValueFrom(this.scryfall.creatureTypes$).catch(() => [] as string[]);
       const groups = await firstValueFrom(
         this.suggestionsService.cards(
           {
@@ -214,6 +230,8 @@ export class DeckWizard {
             colors: this.colors(),
             bracket: this.format() === 'commander' ? this.bracket() : undefined,
             exclude: [...ownedCards.map((c) => c.name), ...(commander ? [commander.name] : [])],
+            creatureTypes: deckCreatureTypes(commander, ownedCards, catalog),
+            preferredSets: this.preferredSets(),
             ownedNonLands: this.owned()
               .filter((o) => !o.card?.type_line?.includes('Land') && (!commander || o.card?.name !== commander.name))
               .reduce((sum, o) => sum + o.entry.count, commander ? 1 : 0),
@@ -245,7 +263,7 @@ export class DeckWizard {
     for (const group of this.groups()) {
       for (const card of group.cards.filter((c) => this.isSelected(c))) {
         const copies = commanderDeck || group.role === 'lands' ? 1 : CONSTRUCTED_COPIES;
-        entries.push({ count: copies, name: deckCardName(card), section: 'main' });
+        entries.push({ count: copies, ...this.printing(card), section: 'main' });
       }
     }
 
@@ -281,8 +299,15 @@ export class DeckWizard {
   }
 
   // Suggestions are ranked on the English cards; this swaps in the printings in the card language where they exist.
+  // Cards from the own sets keep that printing; for all others any printing (in the card language) will do.
+  private printing(card: ScryfallCard): Pick<DeckEntry, 'name' | 'set' | 'collectorNumber'> {
+    return this.preferredSets().includes(card.set)
+      ? { name: deckCardName(card), set: card.set, collectorNumber: card.collector_number }
+      : { name: deckCardName(card) };
+  }
+
   private async localize(cards: readonly ScryfallCard[]): Promise<ScryfallCard[]> {
-    const entries = cards.map((card): DeckEntry => ({ count: 1, name: deckCardName(card), section: 'main' }));
+    const entries = cards.map((card): DeckEntry => ({ count: 1, ...this.printing(card), section: 'main' }));
     if (!entries.length) {
       return [];
     }

@@ -120,7 +120,7 @@ export const de: Translations = {
     withoutCommander: 'Ohne Commander weiter',
     ownedCount: '{{count}} eigene Karten erkannt',
     suggestionsTitle: 'Vorgeschlagene Karten',
-    suggestionsHint: 'Die meistgespielten Karten in deinen Farben, passend zur gewählten Stufe. Klicke Karten an, um sie ab- oder wieder anzuwählen ({{count}} ausgewählt). Freie Plätze werden mit Standardländern aufgefüllt.',
+    suggestionsHint: 'Die meistgespielten Karten in deinen Farben, passend zur gewählten Stufe – Karten aus den Sets deiner eigenen Karten zuerst. Klicke Karten an, um sie ab- oder wieder anzuwählen ({{count}} ausgewählt). Freie Plätze werden mit Standardländern aufgefüllt.',
     role: {
       ramp: 'Mana-Beschleunigung',
       draw: 'Kartenvorteil',
@@ -129,6 +129,7 @@ export const de: Translations = {
       creatures: 'Kreaturen',
       lands: 'Länder',
     },
+    forTypes: 'passend zu {{types}}',
     create: 'Deck erstellen',
     back: 'Zurück',
     next: 'Weiter',

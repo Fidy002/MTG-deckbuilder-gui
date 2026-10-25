@@ -1,5 +1,5 @@
 import { ScryfallCard } from '../scryfall/scryfall.models';
-import { basicLands, commanderQuery, pickSuggestions, roleCounts, roleQuery } from './deck-suggestions';
+import { basicLands, commanderQuery, deckCreatureTypes, newerFirst, pickSuggestions, preferredSets, roleCounts, roleQuery, setQuery, tribalQuery } from './deck-suggestions';
 
 const card = (name: string, oracle_text = '', game_changer = false) => ({ name, oracle_text, game_changer }) as unknown as ScryfallCard;
 
@@ -59,5 +59,33 @@ describe('deck suggestions', () => {
       { count: 3, name: 'Forest', section: 'main' },
     ]);
     expect(basicLands([], 2)).toEqual([{ count: 2, name: 'Wastes', section: 'main' }]);
+  });
+
+  it('finds the creature types of a deck from the commander and the own cards', () => {
+    const beorn = {
+      name: 'Beorn the Fierce',
+      type_line: 'Legendary Creature — Bear Shapeshifter Warrior',
+      oracle_text: 'Trample\nOther Bears you control get +2/+2.',
+    } as unknown as ScryfallCard;
+    const human = { name: 'Elder', type_line: 'Creature — Human Druid' } as unknown as ScryfallCard;
+    const catalog = ['Bear', 'Shapeshifter', 'Warrior', 'Human', 'Druid', 'Elf'];
+    expect(deckCreatureTypes(beorn, [human, human], catalog)).toEqual(['Bear', 'Druid']);
+    expect(deckCreatureTypes({ ...beorn, oracle_text: 'Trample' }, [], catalog)).toEqual(['Bear', 'Shapeshifter', 'Warrior']);
+    expect(deckCreatureTypes(undefined, [human, human], catalog)).toEqual(['Druid']);
+    expect(tribalQuery(['Bear'])).toBe('t:creature (t:"bear" or kw:changeling)');
+  });
+
+  it('lists cards of recent sets first', () => {
+    const cards = [
+      { name: 'Old', released_at: '2010-01-01' },
+      { name: 'New', released_at: '2025-06-01' },
+    ] as unknown as ScryfallCard[];
+    expect(newerFirst(cards, new Date('2026-10-24')).map((c) => c.name)).toEqual(['New', 'Old']);
+  });
+
+  it('prefers the most frequent sets of the own cards, ignoring basic lands', () => {
+    const owned = [{ set: 'blb' }, { set: 'blb' }, { set: 'fdn' }, { set: 'm21', basic: true }, { set: 'm21', basic: true }, {}];
+    expect(preferredSets(owned)).toEqual(['blb', 'fdn']);
+    expect(setQuery(['blb', 'fdn'])).toBe('(set:blb or set:fdn)');
   });
 });

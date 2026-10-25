@@ -234,7 +234,7 @@ textarea {
     border-radius: var(--radius-card);
   }
 
-  &.active {
+  &.active:not(.commander-pick) {
     border-color: var(--color-accent);
   }
 
@@ -294,6 +294,11 @@ textarea {
   border-bottom: var(--line-width) solid var(--color-line);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   background: var(--color-surface);
+}
+
+.nav-right {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .busy {

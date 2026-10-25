@@ -79,7 +79,7 @@ export class CardHoverOverlay {
     this.preview.set(undefined);
   }
 
-  private spawnEmbers(area: DOMRect): void {
+  spawnEmbers(area: DOMRect): void {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       return;
     }

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, inject, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { CardHoverOverlay } from './card-hover-overlay.service';
 
 // Hover effect for card images. `hitHeight` limits the reactive area, e.g. to the visible strip of a stacked card.
@@ -14,6 +14,7 @@ export type CardHalf = 'upper' | 'lower';
     '[class.split]': 'splitHalves()',
     '[class.lower]': "half() === 'lower'",
     '[class.marked]': 'marked()',
+    '[class.selected]': 'selected()',
   },
   template: `
     <ng-content />
@@ -75,6 +76,22 @@ export type CardHalf = 'upper' | 'lower';
       filter: url('#hover-water-still');
     }
 
+    // Selected cards (e.g. the chosen commander in the deck wizard) glow gold, also while hovered.
+    :host(.selected:not(.hovered))::after {
+      inset: calc(-1 * var(--highlight-offset));
+      background: var(--color-selected-glow);
+      filter: url('#hover-water');
+      animation: highlight-pop var(--highlight-pop-duration) ease-out;
+
+      @media (prefers-reduced-motion: reduce) {
+        filter: url('#hover-water-still');
+      }
+    }
+
+    :host(.selected.hovered:not(.disabled))::after {
+      background: var(--color-selected-glow);
+    }
+
     // Upper half in split mode: small, faint glow; the full glow pops in once the pointer reaches the lower half.
     :host(.split.hovered:not(.lower))::after {
       inset: calc(-1 * var(--highlight-offset-dim));
@@ -126,6 +143,7 @@ export class CardHover {
   readonly disabled = input(false);
   readonly splitHalves = input(false);
   readonly marked = input(false);
+  readonly selected = input(false);
   // Shown in red with the large preview, e.g. why the card is not legal.
   readonly warning = input<string>();
   readonly halfChange = output<CardHalf | undefined>();
@@ -137,6 +155,31 @@ export class CardHover {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.hovered() && this.overlay.hide());
+
+    // Becoming selected replays the hover hop and embers; a card that starts out selected stays calm.
+    let initial = true;
+    effect(() => {
+      const selected = this.selected();
+      if (selected && !initial) {
+        untracked(() => this.celebrate());
+      }
+      initial = false;
+    });
+  }
+
+  private celebrate(): void {
+    const host = this.host.nativeElement;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+    const styles = getComputedStyle(host);
+    const distance = parseFloat(styles.getPropertyValue('--card-hop-distance')) || 3;
+    const duration = parseFloat(styles.getPropertyValue('--highlight-pop-duration')) || 200;
+    host.animate(
+      [{ transform: 'none' }, { transform: `translateY(${-distance}px)`, offset: 0.5 }, { transform: 'none' }],
+      { duration, easing: 'ease-out' },
+    );
+    this.overlay.spawnEmbers((host.querySelector('.hit-area') ?? host).getBoundingClientRect());
   }
 
   protected enter(event: MouseEvent): void {

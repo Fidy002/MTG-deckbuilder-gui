@@ -146,7 +146,12 @@
       </div>
       <div class="nav">
         <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
-        <button type="button" [disabled]="busy()" (click)="chooseCommander(undefined)">{{ 'wizard.withoutCommander' | t }}</button>
+        <span class="nav-right">
+          <button type="button" [disabled]="busy()" (click)="continueWithCommander(undefined)">{{ 'wizard.withoutCommander' | t }}</button>
+          <button type="button" class="primary" [disabled]="busy() || !commander()" (click)="continueWithCommander(commander())">
+            {{ 'wizard.next' | t }}
+          </button>
+        </span>
       </div>
     }
 
@@ -155,7 +160,12 @@
       <p class="lead">{{ 'wizard.suggestionsHint' | t: { count: selectedCount() } }}</p>
       @for (group of groups(); track group.role) {
         @if (group.cards.length) {
-          <p class="caps-label">{{ roleLabel(group.role) | t }} · {{ group.cards.length }}</p>
+          <p class="caps-label">
+            {{ roleLabel(group.role) | t }} · {{ group.cards.length }}
+            @if (group.types?.length) {
+              · {{ 'wizard.forTypes' | t: { types: group.types!.join(', ') } }}
+            }
+          </p>
           <div class="cards">
             @for (card of group.cards; track card.id) {
               <ng-container *ngTemplateOutlet="pickCard; context: { $implicit: card, active: isSelected(card), pick: false }" />
@@ -196,14 +206,15 @@
   <button
     type="button"
     class="pick"
+    [class.commander-pick]="pick"
     [class.active]="active"
     [class.off]="!pick && !active"
     [attr.aria-pressed]="active"
     [attr.aria-label]="name(card)"
     [disabled]="busy()"
-    (click)="pick ? chooseCommander(card) : toggleSuggestion(card)"
+    (click)="pick ? selectCommander(card) : toggleSuggestion(card)"
   >
-    <app-card-hover [name]="name(card)" [previewImage]="largeImage(card)">
+    <app-card-hover [name]="name(card)" [previewImage]="largeImage(card)" [selected]="pick && active">
       @if (image(card); as src) {
         <img [src]="src" [alt]="name(card)" loading="lazy" width="488" height="680" />
       } @else {
