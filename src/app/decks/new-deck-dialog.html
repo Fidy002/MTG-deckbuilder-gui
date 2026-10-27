@@ -1,0 +1,21 @@
+<div class="backdrop" (click)="closed.emit()"></div>
+
+<div class="dialog panel" role="dialog" aria-modal="true" [attr.aria-label]="'newDeck.title' | t">
+  <h2>{{ 'newDeck.title' | t }}</h2>
+
+  <div class="options">
+    <button type="button" class="option primary-option" (click)="openWizard()">
+      <strong>{{ 'newDeck.wizard' | t }}</strong>
+      <span>{{ 'newDeck.wizardHint' | t }}</span>
+    </button>
+
+    <button type="button" class="option" (click)="createEmpty()">
+      <strong>{{ 'newDeck.empty' | t }}</strong>
+      <span>{{ 'newDeck.emptyHint' | t }}</span>
+    </button>
+  </div>
+
+  <footer>
+    <button type="button" class="cancel" (click)="closed.emit()">{{ 'import.cancel' | t }}</button>
+  </footer>
+</div>

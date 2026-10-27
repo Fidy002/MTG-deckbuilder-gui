@@ -1,14 +1,20 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe } from '../i18n/translate.pipe';
 import { ScryfallCard, cardDisplayName, cardFaces } from '../scryfall/scryfall.models';
+import { Badge, CardBadges } from '../shared/card-badges/card-badges';
 import { CardHalf, CardHover } from '../shared/card-hover/card-hover';
 import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.service';
 
 @Component({
   selector: 'app-card-tile',
-  imports: [TranslatePipe, CardHover],
+  imports: [TranslatePipe, CardBadges, CardHover],
   template: `
-    <button type="button" class="tile" [attr.aria-label]="name()" (click)="activate($event)">
+    <button
+      type="button"
+      class="tile"
+      [attr.aria-label]="name()"
+      (click)="activate($event)"
+    >
       <app-card-hover
         [name]="name()"
         [previewImage]="largeImage()"
@@ -22,6 +28,9 @@ import { CardHoverOverlay } from '../shared/card-hover/card-hover-overlay.servic
             {{ name() }}
             <small>{{ 'card.noImage' | t }}</small>
           </span>
+        }
+        @if (badges()?.length) {
+          <app-card-badges [badges]="badges()!" />
         }
         @if (addable()) {
           <span class="add-zone" [class.active]="half() === 'lower'" aria-hidden="true">
@@ -118,6 +127,10 @@ export class CardTile {
 
   readonly card = input.required<ScryfallCard>();
   readonly addable = input(false);
+  // Toggle mode: a click on the whole card picks it.
+  readonly toggle = input(false);
+  // Why a suggested card fits the deck.
+  readonly badges = input<readonly Badge[]>();
   readonly selected = output<ScryfallCard>();
   readonly add = output<ScryfallCard>();
 
@@ -130,7 +143,10 @@ export class CardTile {
   protected activate(event: MouseEvent): void {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     const onLowerHalf = event.detail > 0 && event.clientY > rect.top + rect.height / 2;
-    if (this.addable() && onLowerHalf) {
+    if (this.toggle()) {
+      this.hoverOverlay.hide();
+      this.addToDeck();
+    } else if (this.addable() && onLowerHalf) {
       this.addToDeck();
     } else {
       this.hoverOverlay.hide();

@@ -56,3 +56,7 @@
 @if (importing()) {
   <app-import-dialog (imported)="onImported($event)" (closed)="importing.set(false)" />
 }
+
+@if (choosingNew()) {
+  <app-new-deck-dialog (closed)="choosingNew.set(false)" />
+}

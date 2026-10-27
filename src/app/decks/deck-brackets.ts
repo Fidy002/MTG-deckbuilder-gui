@@ -62,6 +62,36 @@ const CEDH_COMBOS: readonly (readonly string[])[] = [
   ['Hermit Druid', "Thassa's Oracle"],
 ];
 
+/** A Scryfall search for every piece of the known two-card wins. */
+export function comboPiecesQuery(): string {
+  const names = [...new Set(CEDH_COMBOS.flat())];
+  return `(${names.map((name) => `!"${name}"`).join(' or ')})`;
+}
+
+/** The other pieces of the known two-card wins a card belongs to. */
+export function comboPartners(name: string): string[] {
+  const lower = name.toLowerCase();
+  return CEDH_COMBOS.filter((combo) => combo.some((piece) => piece.toLowerCase() === lower)).flatMap((combo) =>
+    combo.filter((piece) => piece.toLowerCase() !== lower),
+  );
+}
+
+/**
+ * The pieces still missing for a known two-card win: none when the deck already has one, otherwise those of the first
+ * win (strongest first) whose missing pieces are all available; undefined when no win can be completed.
+ */
+export function missingComboPieces(have: ReadonlySet<string>, available: ReadonlySet<string>): string[] | undefined {
+  const lower = (names: ReadonlySet<string>) => new Set([...names].map((name) => name.toLowerCase()));
+  const owned = lower(have);
+  const open = lower(available);
+  const missing = CEDH_COMBOS.map((combo) => combo.filter((piece) => !owned.has(piece.toLowerCase())));
+  if (missing.some((pieces) => !pieces.length)) {
+    return [];
+  }
+  const completable = missing.filter((pieces) => pieces.every((piece) => open.has(piece.toLowerCase())));
+  return completable.sort((a, b) => a.length - b.length)[0];
+}
+
 // cEDH: either a known compact win next to plenty of Game Changers and fast mana, or overwhelming amounts of both.
 const CEDH_WITH_COMBO = { gameChangers: 6, fastMana: 3 };
 const CEDH_WITHOUT_COMBO = { gameChangers: 10, fastMana: 5 };

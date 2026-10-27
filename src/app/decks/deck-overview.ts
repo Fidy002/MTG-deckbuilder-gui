@@ -19,6 +19,39 @@ import { DeckEntry, DeckSection, cleanCategory } from './decklist';
 
 type CardType = 'creature' | 'planeswalker' | 'battle' | 'instant' | 'sorcery' | 'artifact' | 'enchantment' | 'land' | 'other';
 
+const FLASH_TIMEOUT_MS = 4000;
+const CARD_FLASH: Keyframe[] = [
+  { transform: 'scale(1.06)', filter: 'brightness(1.35) drop-shadow(0 0 14px var(--color-highlight))', offset: 0.3 },
+];
+const TOP_GLOW: Keyframe[] = [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0 }];
+const TOP_GLOW_STRETCH = 1.5;
+
+function flashDuration(root: HTMLElement): number {
+  return parseFloat(getComputedStyle(root).getPropertyValue('--added-flash-duration')) || 700;
+}
+
+export function flashWhenReady(root: HTMLElement, selector: string, keyframes: Keyframe[], then?: () => void): void {
+  const started = Date.now();
+  const attempt = () => {
+    const element = root.querySelector<HTMLElement>(selector);
+    if (element && !(element as HTMLButtonElement).disabled && !element.classList.contains('loading')) {
+      element.animate(keyframes, { duration: flashDuration(root), easing: 'ease-out' });
+      then?.();
+    } else if (Date.now() - started < FLASH_TIMEOUT_MS) {
+      setTimeout(attempt, 100);
+    }
+  };
+  setTimeout(attempt, 50);
+}
+
+export function flashAdded(root: HTMLElement, key: string): void {
+  flashWhenReady(root, `[data-card-key="${CSS.escape(key)}"]`, CARD_FLASH, () =>
+    root
+      .querySelector<HTMLElement>('app-deck-overview .top-glow')
+      ?.animate(TOP_GLOW, { duration: flashDuration(root) * TOP_GLOW_STRETCH, easing: 'ease-out' }),
+  );
+}
+
 const TYPE_ORDER: readonly CardType[] = [
   'creature', 'planeswalker', 'battle', 'instant', 'sorcery', 'artifact', 'enchantment', 'land', 'other',
 ];
@@ -80,6 +113,11 @@ export class DeckOverview {
   readonly commanderZone = input(false);
   // Off for lists that are not a saved deck yet (deck wizard): no editing actions in the card preview.
   readonly editable = input(true);
+  // Remove mode (deck wizard): clicking a card removes it instead of opening its preview.
+  readonly removeMode = input(false);
+  // Centers the groups on the screen while they fit (deck wizard); otherwise they start at the left.
+  readonly centered = input(false);
+  readonly removeCard = output<DeckEntry>();
   readonly colorsChange = output<string[]>();
   readonly legalityChange = output<LegalityResult | undefined>();
   // Clicking any warning triangle asks the page to show the legality details.
@@ -137,7 +175,8 @@ export class DeckOverview {
 
   private readonly cards = computed(() => {
     const resolved = this.resolved();
-    return this.entries().map((entry): OverviewCard => {
+    const failed = this.state().status === 'error';
+    return this.entries().filter((entry) => failed || resolved.get(cardKey(entry)) !== undefined).map((entry): OverviewCard => {
       const result = resolved.get(cardKey(entry));
       return {
         key: cardKey(entry),
@@ -149,6 +188,16 @@ export class DeckOverview {
       };
     });
   });
+
+  private readonly loadedImages = signal(new Set<string>());
+
+  protected imageLoaded(url: string): void {
+    this.loadedImages.update((urls) => new Set(urls).add(url));
+  }
+
+  protected isLoading(card: OverviewCard): boolean {
+    return !!card.image && !this.loadedImages().has(card.image);
+  }
 
   protected readonly groups = computed(() => {
     const cards = this.cards();
@@ -387,6 +436,10 @@ export class DeckOverview {
 
   protected open(card: OverviewCard): void {
     this.hoverOverlay.hide();
+    if (this.removeMode()) {
+      this.removeCard.emit(card.entry);
+      return;
+    }
     this.selected.set(card);
   }
 

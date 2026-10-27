@@ -1,4 +1,5 @@
 import { ScryfallCard } from '../scryfall/scryfall.models';
+import type { SuggestionRole } from './deck-suggestions';
 
 export type AutoCategory = 'wipe' | 'counter' | 'removal' | 'tutor' | 'ramp' | 'draw';
 
@@ -44,4 +45,19 @@ export function autoCategory(card: ScryfallCard): AutoCategory | undefined {
     .toLowerCase()
     .replace(/\([^)]*\)/g, '');
   return AUTO_CATEGORIES.find((category) => RULES[category].some((rule) => rule.test(text)));
+}
+
+// The suggestion roles whose cards can't be told apart by their type line.
+const CATEGORY_ROLES: Partial<Record<AutoCategory, SuggestionRole>> = {
+  ramp: 'ramp',
+  draw: 'draw',
+  removal: 'removal',
+  wipe: 'wipes',
+  tutor: 'tutors',
+};
+
+/** The suggestion role a card fills by its rules text (ramp, draw, removal, wipes, tutors), if any. */
+export function categoryRole(card: ScryfallCard): SuggestionRole | undefined {
+  const category = autoCategory(card);
+  return category && CATEGORY_ROLES[category];
 }

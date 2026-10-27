@@ -1,9 +1,16 @@
 <header class="wizard-head">
   <div>
-    <a class="back-link" routerLink="/decks">← {{ 'decks.drawerTitle' | t }}</a>
-    <h2>{{ 'wizard.title' | t }}</h2>
+    @if (editing(); as deck) {
+      <a class="back-link" [routerLink]="['/decks', deck.id]">← {{ deck.name }}</a>
+      <h2>{{ 'wizard.editTitle' | t: { name: deck.name } }}</h2>
+    } @else {
+      <a class="back-link" routerLink="/decks">← {{ 'decks.drawerTitle' | t }}</a>
+      <h2>{{ 'wizard.title' | t }}</h2>
+    }
   </div>
-  <button type="button" (click)="createEmpty()">{{ 'wizard.empty' | t }}</button>
+  @if (!editing()) {
+    <button type="button" (click)="createEmpty()">{{ 'wizard.empty' | t }}</button>
+  }
 </header>
 
 <ol class="progress">
@@ -29,30 +36,119 @@
           <span>{{ 'wizard.formatConstructedHint' | t }}</span>
         </button>
       </div>
+      <div class="nav">
+        <span class="nav-right">
+          <button type="button" class="primary" (click)="step.set('cards')">{{ 'wizard.next' | t }}</button>
+        </span>
+      </div>
     }
 
     @case ('level') {
       @if (format() === 'commander') {
         <h3>{{ 'wizard.bracketQuestion' | t }}</h3>
-        <p class="lead">{{ 'bracket.infoText' | t }}</p>
-        <div class="scale" aria-hidden="true">
-          <span>Kitchen Table</span>
-          <span>{{ 'wizard.tournament' | t }}</span>
-        </div>
-        <div class="choices five" role="radiogroup" [attr.aria-label]="'bracket.label' | t">
+        <p class="lead">
+          {{ 'bracket.infoBefore' | t }}
+          <button type="button" class="link" (click)="openGameChangers()">{{ 'bracket.gameChangersLink' | t }}</button>{{ 'bracket.infoAfter' | t }}
+        </p>
+        @if (showGameChangers()) {
+          <div class="dialog-backdrop" (click)="showGameChangers.set(false)"></div>
+          <div class="outside-dialog panel" role="dialog" aria-modal="true" [attr.aria-label]="'wizard.gameChangersTitle' | t">
+            <header>
+              <h2>{{ 'wizard.gameChangersTitle' | t }}@if (gameChangers(); as cards) { · {{ cards.length }}}</h2>
+              <button type="button" class="dialog-close" (click)="showGameChangers.set(false)" [attr.aria-label]="'card.close' | t">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+            </header>
+            @if (gameChangers(); as cards) {
+              <div class="cards">
+                @for (card of cards; track card.id) {
+                  <app-card-hover [name]="name(card)" [previewImage]="largeImage(card)">
+                    @if (image(card); as src) {
+                      <img [src]="src" [alt]="name(card)" loading="lazy" width="488" height="680" />
+                    } @else {
+                      <span class="card-placeholder">{{ name(card) }}</span>
+                    }
+                  </app-card-hover>
+                }
+              </div>
+            } @else if (gameChangersFailed()) {
+              <p class="status error">{{ 'search.error' | t }}</p>
+            } @else {
+              <div class="busy-inline" role="status">
+                <span class="spinner" aria-hidden="true"></span>
+                <span class="caps-label">{{ 'wizard.loading' | t }}</span>
+              </div>
+            }
+          </div>
+        }
+        @if (styleMinBracket(); as min) {
+          <p class="bracket-hint" [class.warning]="bracket() < min">
+            {{ 'wizard.bracketStyleHint' | t: { style: (styleLabel(style()) | t), bracket: min } }}
+            {{ styleBracketReason() | t }}
+          </p>
+        }
+        <div class="brackets" role="radiogroup" [attr.aria-label]="'bracket.label' | t">
           @for (option of brackets; track option.value) {
+            @if (option.value === 1) {
+              <div class="zone-head casual">
+                <span class="zone-title">
+                  <strong>{{ 'wizard.zoneCasual' | t }}</strong>
+                </span>
+              </div>
+            } @else if (option.value === recommendedBracket + 1) {
+              <div class="zone-head competitive">
+                <span class="zone-title">
+                  <strong>{{ 'wizard.zoneCompetitive' | t }}</strong>
+                </span>
+              </div>
+              <span class="zone-divider" aria-hidden="true"></span>
+              <div class="track" aria-hidden="true"></div>
+            }
             <button
               type="button"
               role="radio"
+              [style.--col]="option.value"
               class="choice bracket-choice"
+              [class.casual]="isCasual(option.value)"
               [class.active]="bracket() === option.value"
               [attr.aria-checked]="bracket() === option.value"
-              (click)="bracket.set(option.value)"
+              (click)="pickBracket(option.value)"
             >
-              <span class="bracket-number">{{ option.value }}</span>
-              <strong>{{ option.name }}</strong>
-              <span>{{ bracketLevelKey(option.value) | t }}</span>
+              <span class="tab" aria-hidden="true">
+                <svg viewBox="0 0 72 43" width="72" height="43">
+                  <path class="tab-fill" d="M21 40.5A8 8 0 0 0 29 32.5V29.27A15 15 0 1 1 43 29.27V32.5A8 8 0 0 0 51 40.5V43H21Z" />
+                  <path class="tab-line" d="M21 40.5A8 8 0 0 0 29 32.5V29.27A15 15 0 1 1 43 29.27V32.5A8 8 0 0 0 51 40.5" />
+                  <circle class="tab-disc" cx="36" cy="16" r="11" />
+                </svg>
+                <span class="tab-number">{{ option.value }}</span>
+              </span>
+              <span class="bracket-top">
+                <strong>{{ bracketNameKey(option.value) | t }}</strong>
+                <span class="official">{{ option.name }}</span>
+              </span>
+              <span>{{ bracketTaglineKey(option.value) | t }}</span>
+              <span class="meters">
+                <span class="meter">
+                  <span class="meter-label">{{ 'wizard.meterCost' | t }}</span>
+                  <span class="euros" [attr.aria-label]="option.value + '/5'">
+                    @for (level of levels; track level) {
+                      <span [class.on]="level <= option.value">€</span>
+                    }
+                  </span>
+                </span>
+                <span class="meter">
+                  <span class="meter-label">{{ 'wizard.meterDifficulty' | t }}</span>
+                  <span class="pips" [attr.aria-label]="option.value + '/5'">
+                    @for (level of levels; track level) {
+                      <span class="pip" [class.on]="level <= option.value"></span>
+                    }
+                  </span>
+                </span>
+              </span>
             </button>
+            @if (option.value === recommendedBracket) {
+              <span class="recommended-note caps-label" [style.--col]="option.value">{{ 'wizard.recommendedBracket' | t }}</span>
+            }
           }
         </div>
       } @else {
@@ -67,14 +163,14 @@
       }
       <div class="nav">
         <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
-        <button type="button" class="primary" (click)="step.set('cards')">{{ 'wizard.next' | t }}</button>
+        <button type="button" class="primary" [disabled]="busy()" (click)="submitLevel()">{{ 'wizard.next' | t }}</button>
       </div>
     }
 
     @case ('cards') {
       <h3>{{ 'wizard.cardsQuestion' | t }}</h3>
       <p class="lead">{{ 'wizard.cardsSearchHint' | t }}</p>
-      <app-card-search [compact]="true" (picked)="addOwned($event)" />
+      <app-card-search [compact]="true" [toggle]="true" [chosen]="ownedNames()" (picked)="toggleOwned($event)" />
       @if (lastAdded(); as added) {
         <p class="added" role="status">{{ 'decks.cardAdded' | t: { card: added } }}</p>
       }
@@ -86,9 +182,32 @@
           {{ 'decks.viewText' | t }}
         </button>
       </div>
+      @if (format() === 'commander' && ownedIdentity(); as identity) {
+        <ng-container *ngTemplateOutlet="identityBox; context: { $implicit: identity }" />
+      }
       @if (ownedView() === 'overview') {
         @if (ownedEntries().length) {
-          <app-deck-overview [entries]="ownedEntries()" [language]="cardLanguage()" deckId="" [sort]="deckSort()" [editable]="false" />
+          <div class="remove-bar">
+            <button type="button" class="remove-toggle" [class.active]="removingOwned()" [attr.aria-pressed]="removingOwned()" (click)="removingOwned.set(!removingOwned())">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+              </svg>
+              {{ (removingOwned() ? 'wizard.removeDone' : 'wizard.removeCards') | t }}
+            </button>
+            @if (removingOwned()) {
+              <span class="muted">{{ 'wizard.removeHint' | t }}</span>
+            }
+          </div>
+          <app-deck-overview
+            [entries]="ownedEntries()"
+            [language]="cardLanguage()"
+            deckId=""
+            [sort]="deckSort()"
+            [editable]="false"
+            [centered]="true"
+            [removeMode]="removingOwned()"
+            (removeCard)="removeOwned($event)"
+          />
         } @else {
           <p class="muted">{{ 'wizard.noOwnedCards' | t }}</p>
         }
@@ -109,9 +228,96 @@
       </div>
     }
 
+    @case ('style') {
+      <h3>{{ 'wizard.styleQuestion' | t }}</h3>
+      @if (styleAdvice(); as advice) {
+        <p class="lead">
+          {{ 'wizard.styleAdvice' | t: { style: (styleLabel($any(advice.style)) | t), count: advice.count, total: advice.total } }}
+        </p>
+      }
+      <div class="choices three">
+        @for (option of playStyles; track option) {
+          <button type="button" class="choice" [class.active]="style() === option" (click)="pickStyle(option)">
+            @if (styleAdvice()?.style === option) {
+              <span class="recommended caps-label">{{ 'wizard.recommended' | t }}</span>
+            }
+            <strong>{{ styleLabel(option) | t }}</strong>
+            <span>{{ styleHint(option) | t }}</span>
+            <app-mana-curve class="style-curve" [target]="styleCurve(option)" [mini]="true" [scaleMax]="styleCurveMax" />
+          </button>
+        }
+      </div>
+      <h3>{{ 'wizard.themeQuestion' | t }}</h3>
+      <p class="lead">{{ 'wizard.themeHint' | t }}</p>
+      <div class="theme-picker">
+        <div class="theme-field" (click)="themeInput.focus()">
+          @for (type of themes(); track type) {
+            <span class="theme-tag">
+              {{ typeName(type) }}
+              <button type="button" class="theme-tag-remove" [attr.aria-label]="('wizard.removeTheme' | t) + ' ' + typeName(type)" (click)="toggleTheme(type)">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+            </span>
+          }
+          <input
+            #themeInput
+            type="text"
+            role="combobox"
+            autocomplete="off"
+            aria-autocomplete="list"
+            aria-controls="theme-options"
+            [attr.aria-expanded]="themeOpen() && !!themeMatches().length"
+            [placeholder]="themes().length ? '' : ('wizard.themePlaceholder' | t)"
+            (input)="onThemeInput($event)"
+            (keydown)="onThemeKey($event, themeInput)"
+            (focus)="themeOpen.set(true)"
+            (blur)="themeOpen.set(false)"
+          />
+        </div>
+        @if (themeOpen() && themeMatches().length) {
+          <ul class="theme-options" id="theme-options" role="listbox">
+            @for (type of themeMatches(); track type; let i = $index) {
+              <li
+                role="option"
+                [class.active]="i === themeActive()"
+                [attr.aria-selected]="i === themeActive()"
+                (mousedown)="$event.preventDefault(); pickTheme(type, themeInput)"
+                (mouseenter)="themeActive.set(i)"
+              >
+                {{ typeName(type) }}
+                @if (typeName(type) !== type) {
+                  <span class="muted">{{ type }}</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </div>
+      <div class="nav">
+        <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
+        <button type="button" class="primary" [disabled]="busy()" (click)="submitStyle()">{{ 'wizard.next' | t }}</button>
+      </div>
+    }
+
     @case ('colors') {
       <h3>{{ 'wizard.colorsQuestion' | t }}</h3>
       <ng-container *ngTemplateOutlet="ownedSummary" />
+      @if (colorAdvice(); as advice) {
+        <div class="color-advice">
+          <div class="color-advice-head">
+            <span class="caps-label">{{ 'wizard.colorAdvice' | t }}</span>
+            <ng-container *ngTemplateOutlet="symbols; context: { $implicit: advice.colors }" />
+            @if (!colorsMatchAdvice()) {
+              <button type="button" (click)="useColorAdvice()">{{ 'wizard.useColorAdvice' | t }}</button>
+            }
+          </div>
+          <ul>
+            @for (reason of colorReasons(); track $index) {
+              <li>{{ reason.key | t: reason.params }}</li>
+            }
+          </ul>
+        </div>
+      }
       <div class="colors">
         @for (color of colorOrder; track color) {
           <button type="button" class="color" [class.active]="colors().includes(color)" (click)="toggleColor(color)" [attr.aria-pressed]="colors().includes(color)">
@@ -126,8 +332,95 @@
     }
 
     @case ('commander') {
-      <h3>{{ 'wizard.commanderQuestion' | t }}</h3>
+      <div class="step-head">
+        <h3>{{ 'wizard.commanderQuestion' | t }}</h3>
+        @if (owned().length || commander()) {
+          <span class="identity-compact" [title]="owned().length ? ('wizard.ownedIdentityHint' | t) : ''">
+            @if (owned().length) {
+              <span class="identity-item">
+                <span class="caps-label">{{ 'wizard.yourCards' | t }}</span>
+                <ng-container *ngTemplateOutlet="symbols; context: { $implicit: ownedColors() }" />
+              </span>
+            }
+            @if (commander(); as selected) {
+              <span class="identity-item" [class.mismatch]="!coversOwnedColors(selected)">
+                <span class="caps-label">{{ 'wizard.commanderLabel' | t }}</span>
+                <ng-container *ngTemplateOutlet="symbols; context: { $implicit: identityOf(selected) }" />
+              </span>
+            }
+          </span>
+        }
+      </div>
       <ng-container *ngTemplateOutlet="ownedSummary" />
+      @if (outsideIdentity().length) {
+        <div class="identity-warning" role="alert">
+          <span>
+            {{ 'wizard.outsideIdentity' | t }}
+            @for (item of outsideIdentity(); track cardKeyOf(item); let last = $last) {
+              <button type="button" class="link" (click)="showOutside.set(true)">
+                <span class="link-name">{{ name(item.card!) }}</span><span class="cost">
+                  @for (symbol of costSymbols(item.card!); track $index) {
+                    <img [src]="manaSymbolUrl(symbol)" [alt]="symbol" width="16" height="16" />
+                  }
+                </span>
+              </button>
+              @if (!last) {
+                <span class="separator">,</span>
+              }
+            }
+          </span>
+          <button type="button" [disabled]="busy()" (click)="removeOutsideIdentity()">{{ 'wizard.removeOutsideIdentity' | t }}</button>
+        </div>
+      }
+      @if (showOutside() && outsideIdentity().length) {
+        <div class="dialog-backdrop" (click)="showOutside.set(false)"></div>
+        <div class="outside-dialog panel" role="dialog" aria-modal="true" [attr.aria-label]="'wizard.outsideTitle' | t">
+          <header>
+            <h2>{{ 'wizard.outsideTitle' | t }}</h2>
+            <button type="button" class="dialog-close" (click)="showOutside.set(false)" [attr.aria-label]="'card.close' | t">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+          </header>
+          <p class="muted">{{ 'wizard.outsideIdentity' | t }}</p>
+          <div class="cards">
+            @for (item of outsideIdentity(); track cardKeyOf(item)) {
+              <app-card-hover [name]="name(item.card!)" [previewImage]="largeImage(item.card!)">
+                @if (image(item.card!); as src) {
+                  <img [src]="src" [alt]="name(item.card!)" loading="lazy" width="488" height="680" />
+                } @else {
+                  <span class="card-placeholder">{{ name(item.card!) }}</span>
+                }
+              </app-card-hover>
+            }
+          </div>
+          <div class="dialog-actions">
+            <button type="button" (click)="showOutside.set(false)">{{ 'card.close' | t }}</button>
+            <button type="button" class="primary" (click)="removeOutsideIdentity()">{{ 'wizard.removeOutsideIdentity' | t }}</button>
+          </div>
+        </div>
+      }
+      @if (commander(); as selected) {
+        <div class="chosen-commander">
+          <app-card-hover [name]="name(selected)" [previewImage]="largeImage(selected)">
+            @if (image(selected); as src) {
+              <img [src]="src" [alt]="name(selected)" width="488" height="680" />
+            } @else {
+              <span class="card-placeholder">{{ name(selected) }}</span>
+            }
+          </app-card-hover>
+          <div class="chosen-info">
+            <span class="caps-label">{{ (commanderPicked() ? 'wizard.chosenCommander' : 'wizard.suggestedCommander') | t }}</span>
+            <strong>{{ name(selected) }}</strong>
+            <ng-container *ngTemplateOutlet="symbols; context: { $implicit: identityOf(selected) }" />
+            @if (commanderOwned()) {
+              <span class="muted">{{ 'wizard.fromYourCards' | t }}</span>
+            }
+            @if (!commanderPicked()) {
+              <span class="muted">{{ (owned().length ? 'wizard.suggestedCommanderHint' : 'wizard.bestCommanderHint') | t }}</span>
+            }
+          </div>
+        </div>
+      }
       @if (ownedCommanders().length) {
         <p class="caps-label">{{ 'wizard.fromYourCards' | t }}</p>
         <div class="cards">
@@ -136,7 +429,12 @@
           }
         </div>
       }
-      <p class="caps-label">{{ (owned().length ? 'wizard.fittingCommanders' : 'wizard.popularCommanders') | t }}</p>
+      <div class="commander-head">
+        <p class="caps-label">{{ (owned().length ? 'wizard.fittingCommanders' : 'wizard.popularCommanders') | t }}</p>
+        @if (commanderOptions().length) {
+          <button type="button" [disabled]="busy()" (click)="shuffleCommanders()">{{ 'wizard.otherCommanders' | t }}</button>
+        }
+      </div>
       <div class="cards">
         @for (card of commanderOptions(); track card.id) {
           <ng-container *ngTemplateOutlet="pickCard; context: { $implicit: card, active: commander()?.name === card.name, pick: true }" />
@@ -156,26 +454,160 @@
     }
 
     @case ('suggestions') {
-      <h3>{{ 'wizard.suggestionsTitle' | t }}</h3>
-      <p class="lead">{{ 'wizard.suggestionsHint' | t: { count: selectedCount() } }}</p>
-      @for (group of groups(); track group.role) {
-        @if (group.cards.length) {
-          <p class="caps-label">
-            {{ roleLabel(group.role) | t }} · {{ group.cards.length }}
-            @if (group.types?.length) {
-              · {{ 'wizard.forTypes' | t: { types: group.types!.join(', ') } }}
-            }
-          </p>
-          <div class="cards">
-            @for (card of group.cards; track card.id) {
-              <ng-container *ngTemplateOutlet="pickCard; context: { $implicit: card, active: isSelected(card), pick: false }" />
+      <div class="step-head">
+        <h3>{{ 'wizard.suggestionsTitle' | t }}</h3>
+        <span class="caps-label">{{ 'wizard.deckTotal' | t: { count: deckTotal(), size: deckSize() } }}</span>
+      </div>
+      <div class="curve-box">
+        <app-mana-curve [counts]="curve()" [target]="curveTarget()" [targetTotal]="nonLandTarget()" [numbers]="false" />
+      </div>
+      <ol class="role-steps" role="tablist">
+        @for (group of visibleGroups(); track group.role; let i = $index) {
+          <li [class.done]="i < groupIndex()" [class.active]="i === groupIndex()">
+            <button type="button" role="tab" [attr.aria-selected]="i === groupIndex()" (click)="groupIndex.set(i)">
+              <span class="step-disc">{{ i < groupIndex() ? '✓' : i + 1 }}</span>
+              <span class="step-label">{{ roleLabel(group.role) | t }}</span>
+              <span class="step-count">{{ roleCount(group) }} / {{ group.recommended ?? 0 }}</span>
+            </button>
+          </li>
+        }
+        <li [class.active]="onBasics()">
+          <button type="button" role="tab" [attr.aria-selected]="onBasics()" (click)="groupIndex.set(visibleGroups().length)">
+            <span class="step-disc">{{ roleStepCount() }}</span>
+            <span class="step-label">{{ 'wizard.basicLands' | t }}</span>
+            <span class="step-count">{{ basicTotal() }} / {{ recommendedBasicCount() }}</span>
+          </button>
+        </li>
+      </ol>
+      <div class="role-title">
+        <span class="caps-label">{{ 'wizard.stepOf' | t: { current: groupIndex() + 1, total: roleStepCount() } }}</span>
+        <h4>{{ (currentGroup() ? roleLabel(currentGroup()!.role) : 'wizard.basicLands') | t }}</h4>
+        <span class="role-nav">
+          <button type="button" [disabled]="groupIndex() === 0" (click)="previousGroup()">← {{ 'wizard.back' | t }}</button>
+          @if (lastGroup()) {
+            <button type="button" class="primary" [disabled]="!deckComplete()" (click)="create()">{{ (editing() ? 'wizard.update' : 'wizard.create') | t }}</button>
+          } @else {
+            <button type="button" class="primary" (click)="nextGroup()">{{ 'wizard.next' | t }} →</button>
+          }
+        </span>
+      </div>
+      @if (currentGroup(); as group) {
+        <div class="reasons">
+          <div>
+            <p class="caps-label">{{ 'wizard.whyCount' | t }}</p>
+            <ul>
+              @for (reason of countReasons(); track $index) {
+                <li>{{ reason.key | t: reason.params }}</li>
+              }
+            </ul>
+          </div>
+          <div>
+            <p class="caps-label">{{ 'wizard.tipsTitle' | t }}</p>
+            <ul>
+              @for (reason of tips(); track $index) {
+                <li>{{ reason.key | t: reason.params }}</li>
+              }
+            </ul>
+          </div>
+        </div>
+        <div class="role-head">
+          <span class="role-actions">
+            <button type="button" [disabled]="groupLoading()" (click)="otherSuggestions()">{{ 'wizard.otherSuggestions' | t }}</button>
+            <button type="button" class="primary" [disabled]="groupLoading() || !groupCards().length" (click)="takeAll()">{{ 'wizard.takeAll' | t }}</button>
+          </span>
+        </div>
+        @if (groupLoading()) {
+          <div class="group-loading" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="caps-label">{{ 'wizard.loading' | t }}</span>
+          </div>
+        } @else if (groupCards().length) {
+          <div class="cards suggestion-cards">
+            @for (card of groupCards(); track card.name) {
+              <ng-container *ngTemplateOutlet="pickCard; context: { $implicit: card, active: false, pick: false, badges: badges(card) }" />
             }
           </div>
+        } @else if (group.cards.length) {
+          <p class="muted">{{ 'wizard.allTaken' | t }}</p>
+        } @else {
+          <p class="muted">{{ 'wizard.noRoleSuggestions' | t }}</p>
         }
+      } @else if (onBasics()) {
+        <div class="reasons">
+          <div>
+            <p class="caps-label">{{ 'wizard.whyCount' | t }}</p>
+            <ul>
+              <li>{{ 'wizard.reason.basics' | t: basicCountParams() }}</li>
+            </ul>
+          </div>
+          <div>
+            <p class="caps-label">{{ 'wizard.tipsTitle' | t }}</p>
+            <ul>
+              <li>{{ basicTip() }}</li>
+              <li>{{ 'wizard.basicLook' | t }}</li>
+            </ul>
+          </div>
+        </div>
+        @if (basicsChanged()) {
+          <div class="role-head">
+            <span class="role-actions">
+              <button type="button" (click)="resetBasics()">{{ 'wizard.resetBasics' | t }}</button>
+            </span>
+          </div>
+        }
+        <div class="cards">
+          @for (color of basicColors(); track color) {
+            <div class="basic">
+              @if (basicCards().get(color); as land) {
+                <app-card-hover [name]="name(land)" [previewImage]="largeImage(land)">
+                  @if (image(land); as src) {
+                    <img [src]="src" [alt]="name(land)" loading="lazy" width="488" height="680" />
+                  }
+                </app-card-hover>
+              } @else {
+                <span class="card-placeholder">{{ basicName(color) }}</span>
+              }
+              <div class="stepper">
+                <button type="button" [attr.aria-label]="('wizard.fewer' | t) + ' ' + basicName(color)" [disabled]="!shownBasics()[color]" (click)="changeBasic(color, -1)">−</button>
+                <span class="stepper-count">{{ shownBasics()[color] ?? 0 }}</span>
+                <button type="button" [attr.aria-label]="('wizard.more' | t) + ' ' + basicName(color)" (click)="changeBasic(color, 1)">+</button>
+              </div>
+            </div>
+          }
+        </div>
       }
+      <div class="in-deck">
+        <div class="in-deck-head">
+          <p class="caps-label">{{ 'wizard.inDeck' | t }}</p>
+          <div class="tab-bar" role="tablist">
+            <button type="button" role="tab" [class.active]="!overviewAll()" [attr.aria-selected]="!overviewAll()" (click)="overviewAll.set(false)">
+              {{ 'wizard.onlyRole' | t: { role: ((currentGroup() ? roleLabel(currentGroup()!.role) : 'wizard.basicLands') | t) } }}
+            </button>
+            <button type="button" role="tab" [class.active]="overviewAll()" [attr.aria-selected]="overviewAll()" (click)="overviewAll.set(true)">
+              {{ 'wizard.allCards' | t }}
+            </button>
+          </div>
+        </div>
+        @if (sectionEntries().length) {
+          <app-deck-overview [entries]="sectionEntries()" [language]="cardLanguage()" deckId="" [sort]="deckSort()" [editable]="false" [centered]="true" />
+        } @else {
+          <p class="muted">{{ 'wizard.inDeckEmpty' | t }}</p>
+        }
+      </div>
+      <div class="step-forward">
+        <button type="button" [disabled]="groupIndex() === 0" (click)="previousGroup()">← {{ 'wizard.back' | t }}</button>
+        @if (!lastGroup()) {
+          <button type="button" class="primary" (click)="nextGroup()">{{ 'wizard.nextTo' | t: { name: (nextRoleLabel() | t) } }} →</button>
+        }
+      </div>
       <div class="nav">
         <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
-        <button type="button" class="primary" (click)="create()">{{ 'wizard.create' | t }}</button>
+        <span class="nav-right">
+          @if (!deckComplete()) {
+            <span class="create-hint">{{ 'wizard.deckTotal' | t: { count: deckTotal(), size: deckSize() } }}</span>
+          }
+          <button type="button" class="primary" [disabled]="!deckComplete()" (click)="create()">{{ (editing() ? 'wizard.update' : 'wizard.create') | t }}</button>
+        </span>
       </div>
     }
   }
@@ -191,6 +623,24 @@
   }
 </section>
 
+<ng-template #identityBox let-identity>
+  <div class="identity" role="status">
+    <span class="caps-label">{{ 'wizard.ownedIdentity' | t }}</span>
+    <ng-container *ngTemplateOutlet="symbols; context: { $implicit: identity }" />
+    <span class="muted">{{ 'wizard.ownedIdentityHint' | t }}</span>
+  </div>
+</ng-template>
+
+<ng-template #symbols let-colors>
+  <span class="identity-symbols">
+    @for (color of colors; track color) {
+      <img [src]="manaSymbolUrl(color)" [alt]="color" width="22" height="22" />
+    } @empty {
+      <img [src]="manaSymbolUrl('C')" alt="C" width="22" height="22" />
+    }
+  </span>
+</ng-template>
+
 <ng-template #ownedSummary>
   @if (owned().length) {
     <p class="muted">
@@ -202,17 +652,17 @@
   }
 </ng-template>
 
-<ng-template #pickCard let-card let-active="active" let-pick="pick">
+<ng-template #pickCard let-card let-active="active" let-pick="pick" let-badges="badges">
   <button
     type="button"
     class="pick"
     [class.commander-pick]="pick"
     [class.active]="active"
-    [class.off]="!pick && !active"
-    [attr.aria-pressed]="active"
+    [attr.aria-pressed]="pick ? active : null"
     [attr.aria-label]="name(card)"
+    [attr.data-name]="pick ? null : card.name"
     [disabled]="busy()"
-    (click)="pick ? selectCommander(card) : toggleSuggestion(card)"
+    (click)="pick ? selectCommander(card) : take(card)"
   >
     <app-card-hover [name]="name(card)" [previewImage]="largeImage(card)" [selected]="pick && active">
       @if (image(card); as src) {
@@ -220,10 +670,8 @@
       } @else {
         <span class="card-placeholder">{{ name(card) }}</span>
       }
-      @if (!pick) {
-        <span class="check" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10" /></svg>
-        </span>
+      @if (badges?.length) {
+        <app-card-badges [badges]="badges" />
       }
     </app-card-hover>
   </button>

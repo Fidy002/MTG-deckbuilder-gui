@@ -1,5 +1,5 @@
 import { ScryfallCard } from '../scryfall/scryfall.models';
-import { estimateBracket } from './deck-brackets';
+import { comboPartners, comboPiecesQuery, estimateBracket, missingComboPieces } from './deck-brackets';
 
 const card = (name: string, oracle_text = '', game_changer = false) => ({ name, oracle_text, game_changer }) as unknown as ScryfallCard;
 
@@ -42,5 +42,22 @@ describe('estimateBracket', () => {
 
     expect(estimateBracket([...gameChangers, ...fastMana]).bracket).toBe(4);
     expect(estimateBracket(combo).bracket).toBe(4);
+  });
+});
+
+describe('combo pieces', () => {
+  it('finds the partners of a combo piece and searches all pieces', () => {
+    expect(comboPartners("Thassa's Oracle")).toEqual(['Demonic Consultation', 'Tainted Pact', 'Doomsday', 'Hermit Druid']);
+    expect(comboPartners('Sol Ring')).toEqual([]);
+    expect(comboPiecesQuery()).toContain('!"Demonic Consultation"');
+  });
+});
+
+describe('missingComboPieces', () => {
+  it('finds the pieces still missing for a known win among the available cards', () => {
+    expect(missingComboPieces(new Set(["Thassa's Oracle"]), new Set(['Demonic Consultation', 'Sol Ring']))).toEqual(['Demonic Consultation']);
+    expect(missingComboPieces(new Set(), new Set(['Isochron Scepter', 'Dramatic Reversal']))).toEqual(['Isochron Scepter', 'Dramatic Reversal']);
+    expect(missingComboPieces(new Set(['Isochron Scepter', 'Dramatic Reversal']), new Set())).toEqual([]);
+    expect(missingComboPieces(new Set(['Sol Ring']), new Set(['Isochron Scepter']))).toBeUndefined();
   });
 });

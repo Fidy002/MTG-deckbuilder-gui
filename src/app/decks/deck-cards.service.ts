@@ -10,6 +10,18 @@ export interface ResolvedCard {
   localized: boolean;
 }
 
+// A printing in the card language without a scan keeps its names and texts but shows the English images.
+export function withImages(local: ScryfallCard, english: ScryfallCard): ScryfallCard {
+  if (local === english || local.image_status !== 'placeholder') {
+    return local;
+  }
+  return {
+    ...local,
+    image_uris: english.image_uris,
+    card_faces: local.card_faces?.map((face, i) => ({ ...face, image_uris: english.card_faces?.[i]?.image_uris ?? face.image_uris })),
+  };
+}
+
 export function cardKey(entry: Pick<DeckEntry, 'name' | 'set' | 'collectorNumber'>): string {
   return [entry.name.toLowerCase(), entry.set ?? '', entry.collectorNumber ?? ''].join('|');
 }

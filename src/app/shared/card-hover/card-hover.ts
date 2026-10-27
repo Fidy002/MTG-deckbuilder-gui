@@ -15,6 +15,7 @@ export type CardHalf = 'upper' | 'lower';
     '[class.lower]': "half() === 'lower'",
     '[class.marked]': 'marked()',
     '[class.selected]': 'selected()',
+    '[class.danger]': 'danger()',
   },
   template: `
     <ng-content />
@@ -92,6 +93,11 @@ export type CardHalf = 'upper' | 'lower';
       background: var(--color-selected-glow);
     }
 
+    // Cards a click removes glow red while hovered.
+    :host(.danger.hovered:not(.disabled))::after {
+      background: var(--color-illegal-glow);
+    }
+
     // Upper half in split mode: small, faint glow; the full glow pops in once the pointer reaches the lower half.
     :host(.split.hovered:not(.lower))::after {
       inset: calc(-1 * var(--highlight-offset-dim));
@@ -144,6 +150,8 @@ export class CardHover {
   readonly splitHalves = input(false);
   readonly marked = input(false);
   readonly selected = input(false);
+  // A click removes the card: the hover glow turns red.
+  readonly danger = input(false);
   // Shown in red with the large preview, e.g. why the card is not legal.
   readonly warning = input<string>();
   readonly halfChange = output<CardHalf | undefined>();

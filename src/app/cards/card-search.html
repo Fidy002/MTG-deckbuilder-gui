@@ -1,6 +1,7 @@
+<ng-content select="[searchActions]" />
 <div class="filters">
   <label class="search">
-    <span class="caps-label">{{ 'search.label' | t }}</span>
+    <span class="visually-hidden">{{ 'search.label' | t }}</span>
     <input
       type="search"
       autocomplete="off"
@@ -9,6 +10,36 @@
       [placeholder]="(compact() ? 'search.compactHint' : 'search.placeholder') | t"
     />
   </label>
+  <div class="color-filters" role="group" [attr.aria-label]="'search.colorFilter' | t">
+    @for (color of colorFilters; track color) {
+      <button
+        type="button"
+        class="color-filter"
+        [class.active]="colors().includes(color)"
+        [attr.aria-pressed]="colors().includes(color)"
+        [attr.aria-label]="colorLabel(color) | t"
+        [title]="colorLabel(color) | t"
+        (click)="toggleColor(color)"
+      >
+        @if (color === 'M') {
+          <span class="multicolor" aria-hidden="true"></span>
+        } @else {
+          <img [src]="manaSymbolUrl(color)" alt="" width="24" height="24" />
+        }
+      </button>
+    }
+    <button
+      type="button"
+      class="color-filter land-filter"
+      [class.active]="landsOnly()"
+      [attr.aria-pressed]="landsOnly()"
+      [attr.aria-label]="'search.landFilter' | t"
+      [title]="'search.landFilter' | t"
+      (click)="toggleLands()"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19 9 9l4 6 3-4 5 8z" /></svg>
+    </button>
+  </div>
   <app-set-select class="sets" [(selected)]="selectedSets" />
 </div>
 
@@ -38,22 +69,32 @@
       @if (!compact()) {
         <p class="status">{{ 'search.noResults' | t }}</p>
       }
+    } @else if (!visibleCards().length) {
+      <p class="status">{{ (result.cards.length === 1 ? 'search.alreadyChosenOne' : 'search.alreadyChosen') | t }}</p>
     } @else {
-      <p class="status">{{ 'search.resultCount' | t: { count: result.totalCards } }}</p>
+      <p class="status">{{ (result.totalCards === 1 ? 'search.resultCountOne' : 'search.resultCount') | t: { count: result.totalCards } }}</p>
     }
   }
 </div>
 
-<div class="results" [class.expanded]="expanded()">
+<div class="results" [class.expanded]="expanded() || !!suggestionResult()">
   <div class="results-inner">
   @if (compact() && shownResult()?.cards?.length === 0) {
     <p class="status empty-results">{{ 'search.noResults' | t }}</p>
   }
-  @if (shownResult(); as result) {
+  @if (shownResult() ?? suggestionResult(); as result) {
     @if (result.cards.length) {
       <div class="grid" #row (wheel)="onRowWheel($event, row)" (scroll)="onRowScroll(row)">
-        @for (card of result.cards; track card.id) {
-          <app-card-tile [card]="card" [addable]="compact()" (selected)="selectedCard.set($event)" (add)="picked.emit($event)" />
+        @for (card of visibleCards(); track card.id) {
+          <app-card-tile
+            [card]="card"
+            [addable]="compact() && !toggle()"
+            [toggle]="toggle()"
+            [attr.data-card-id]="card.id"
+            [badges]="shownResult() ? undefined : suggestionBadges()?.get(card.name)"
+            (selected)="selectedCard.set($event)"
+            (add)="pick($event)"
+          />
         }
       </div>
 

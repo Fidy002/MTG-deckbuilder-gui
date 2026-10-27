@@ -10,6 +10,7 @@ import { DeckCardsService, ResolvedCard, cardKey } from './deck-cards.service';
 import { DeckService, countCards, countSideboard, deckCoverEntry } from './deck.service';
 import { DeckEntry, detectFormat, parseDecklist } from './decklist';
 import { ImportDialog } from './import-dialog';
+import { NewDeckDialog } from './new-deck-dialog';
 
 interface CoverRequest {
   language: string;
@@ -18,7 +19,7 @@ interface CoverRequest {
 
 @Component({
   selector: 'app-deck-gallery',
-  imports: [TranslatePipe, RouterLink, ImportDialog],
+  imports: [TranslatePipe, RouterLink, ImportDialog, NewDeckDialog],
   templateUrl: './deck-gallery.html',
   styleUrl: './deck-gallery.scss',
 })
@@ -84,8 +85,10 @@ export class DeckGallery {
     });
   });
 
+  protected readonly choosingNew = signal(false);
+
   protected create(): void {
-    this.router.navigate(['/decks/new']);
+    this.choosingNew.set(true);
   }
 
   protected onImported(text: string): void {

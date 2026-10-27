@@ -4,6 +4,7 @@ import { Observable, catchError, defer, map, of, shareReplay, switchMap, tap, th
 import { SCRYFALL_API_URL as API_URL } from './scryfall-rate-limit';
 import { CardSearchResult, ScryfallCard, ScryfallList, ScryfallSet } from './scryfall.models';
 import { preserveDiacritics } from './search-query';
+import { withEnglishTypes } from './type-translations';
 
 const SETS_STORAGE_KEY = 'mtg-deckbuilder.sets';
 const SETS_TTL_MS = 24 * 60 * 60 * 1000;
@@ -16,11 +17,13 @@ export class ScryfallService {
   private readonly searchCache = new Map<string, CardSearchResult>();
   private readonly printingCache = new Map<string, ScryfallCard | undefined>();
 
-  searchCards(query: string, language: string, setCodes: readonly string[] = []): Observable<CardSearchResult> {
+  // filter: additional Scryfall syntax that narrows the search (e.g. colors), kept apart from the user's text.
+  searchCards(query: string, language: string, setCodes: readonly string[] = [], filter = ''): Observable<CardSearchResult> {
     const withSets = (q: string) =>
-      [q && `(${q})`, setCodes.length && `(${setCodes.map((code) => `set:${code}`).join(' or ')})`].filter(Boolean).join(' ');
+      [q && `(${q})`, setCodes.length && `(${setCodes.map((code) => `set:${code}`).join(' or ')})`, filter].filter(Boolean).join(' ');
     const fullQuery = withSets(query);
-    const localizedQuery = language === 'en' ? fullQuery : withSets(preserveDiacritics(query));
+    const localizedQuery =
+      language === 'en' ? fullQuery : withSets(preserveDiacritics(language === 'de' ? withEnglishTypes(query) : query));
 
     return this.searchInLanguage(localizedQuery, language).pipe(
       switchMap((result) =>
@@ -108,7 +111,9 @@ export class ScryfallService {
     const params = new HttpParams()
       .set('q', `${query} lang:${language}`)
       .set('unique', 'cards')
-      .set('order', 'name');
+      // Newest sets first.
+      .set('order', 'released')
+      .set('dir', 'desc');
 
     const empty: ScryfallList<ScryfallCard> = { object: 'list', data: [], has_more: false, total_cards: 0 };
 

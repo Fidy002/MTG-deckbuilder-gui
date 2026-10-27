@@ -1,9 +1,8 @@
-<span class="caps-label">{{ 'sets.label' | t }}</span>
-
 <button
   type="button"
   class="trigger"
   aria-haspopup="listbox"
+  [attr.aria-label]="('sets.label' | t) + ': ' + summary()"
   [attr.aria-expanded]="open()"
   [class.active]="selected().length > 0"
   (click)="open.set(!open())"

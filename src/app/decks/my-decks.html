@@ -137,17 +137,18 @@
       </div>
     </div>
 
-    <div class="toolbar">
-      <div class="tab-bar" role="tablist">
-        <button type="button" role="tab" [class.active]="view() === 'overview'" [attr.aria-selected]="view() === 'overview'" (click)="view.set('overview')">
-          {{ 'decks.viewOverview' | t }}
-        </button>
-        <button type="button" role="tab" [class.active]="view() === 'text'" [attr.aria-selected]="view() === 'text'" (click)="view.set('text')">
-          {{ 'decks.viewText' | t }}
-        </button>
-      </div>
-
+    <div class="toolbar" style="flex-wrap: wrap; align-items: flex-end; gap: var(--space-4)">
+      @if (deckCurve(); as curve) {
+        <div class="deck-curve" style="width: min(260px, 100%); margin-right: auto">
+          <app-mana-curve [counts]="curve" [numbers]="false" />
+        </div>
+      }
       <div class="toolbar-actions">
+      <label class="legality-toggle">
+        <input type="checkbox" role="switch" [checked]="legalityCheck()" (change)="toggleLegality(deck.id, $event)" />
+        <span>{{ 'decks.legalityToggle' | t }}</span>
+      </label>
+
       @if (deckFormat() !== 'commander') {
         <label class="sort">
           <span class="caps-label">{{ 'decks.legalityFormat' | t }}</span>
@@ -172,16 +173,14 @@
               [title]="'bracket.infoTitle' | t"
             >?</button>
           </span>
-          <div class="bracket-steps" role="radiogroup" [attr.aria-label]="'bracket.label' | t">
+          <!-- Estimated from the cards; shown, not chosen. -->
+          <div class="bracket-steps" [attr.aria-label]="'bracket.label' | t">
             @for (option of brackets; track option.value) {
-              <button
-                type="button"
-                role="radio"
+              <span
                 [class.active]="deck.bracket === option.value"
-                [attr.aria-checked]="deck.bracket === option.value"
-                [title]="option.value + ' – ' + option.name"
-                (click)="setBracket(deck.id, deck.bracket, option.value)"
-              >{{ option.value }}</button>
+                [attr.aria-current]="deck.bracket === option.value || null"
+                [title]="option.value + ' – ' + (bracketNameKey(option.value) | t) + ' (' + option.name + ')'"
+              >{{ option.value }}</span>
             }
           </div>
           @if (bracketInfoOpen()) {
@@ -191,13 +190,10 @@
               <ol>
                 @for (option of brackets; track option.value) {
                   <li [class.active]="deck.bracket === option.value">
-                    <strong>{{ option.name }}</strong> – {{ bracketLevelKey(option.value) | t }}
+                    <strong>{{ bracketNameKey(option.value) | t }}</strong> ({{ option.name }}) – {{ bracketLevelKey(option.value) | t }}
                   </li>
                 }
               </ol>
-              <button type="button" class="primary" [disabled]="estimating()" (click)="estimateBracket(deck.id)">
-                {{ (estimating() ? 'bracket.autoBusy' : 'bracket.auto') | t }}
-              </button>
               @if (bracketEstimate(); as estimate) {
                 <div class="bracket-result">
                   <p><strong>{{ 'bracket.result' | t: { bracket: estimate.bracket } }}</strong></p>
@@ -216,11 +212,6 @@
           }
         </div>
       }
-
-      <label class="legality-toggle">
-        <input type="checkbox" role="switch" [checked]="legalityCheck()" (change)="toggleLegality(deck.id, $event)" />
-        <span>{{ 'decks.legalityToggle' | t }}</span>
-      </label>
 
       <label class="sort">
         <span class="caps-label">{{ 'decks.format' | t }}</span>
@@ -254,7 +245,26 @@
       <div class="add-cards-body">
         <div class="add-cards-inner">
           @if (addCardsUsed()) {
-            <app-card-search [compact]="true" [language]="deckLanguage()" (picked)="addCard(deck.id, $event)" />
+            <app-card-search
+              #search
+              [compact]="true"
+              [toggle]="true"
+              [chosen]="deckNames()"
+              [language]="deckLanguage()"
+              [suggestions]="suggestions()"
+              [suggestionBadges]="suggestionBadges()"
+              (picked)="toggleCard(deck.id, $event)"
+            >
+              <div class="add-cards-help" searchActions>
+                <button type="button" [disabled]="suggesting()" (click)="suggestCards(deck, search)">{{ 'decks.suggestCards' | t }}</button>
+                <button type="button" (click)="openWizard(deck.id)">{{ 'decks.helpBuild' | t }}</button>
+                @if (suggesting()) {
+                  <span class="muted">{{ 'decks.suggesting' | t }}</span>
+                } @else if (suggestionsFailed()) {
+                  <span class="status error">{{ 'search.error' | t }}</span>
+                }
+              </div>
+            </app-card-search>
           }
         </div>
       </div>
@@ -312,8 +322,27 @@
       }
     }
 
-    @if (view() === 'overview') {
-      <div class="overview-bar">
+    <div class="view-bar">
+      <div class="tab-bar" role="tablist">
+        <button type="button" role="tab" [class.active]="view() === 'overview'" [attr.aria-selected]="view() === 'overview'" (click)="view.set('overview')">
+          {{ 'decks.viewOverview' | t }}
+        </button>
+        <button type="button" role="tab" [class.active]="view() === 'text'" [attr.aria-selected]="view() === 'text'" (click)="view.set('text')">
+          {{ 'decks.viewText' | t }}
+        </button>
+      </div>
+      @if (view() === 'overview') {
+        <div class="remove-bar">
+          @if (removingCards()) {
+            <span class="muted">{{ 'wizard.removeHint' | t }}</span>
+          }
+          <button type="button" class="remove-toggle" [class.active]="removingCards()" [attr.aria-pressed]="removingCards()" (click)="removingCards.set(!removingCards())">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+            </svg>
+            {{ (removingCards() ? 'wizard.removeDone' : 'wizard.removeCards') | t }}
+          </button>
+        </div>
         <label class="sort">
           <span class="caps-label">{{ 'decks.sortBy' | t }}</span>
           <select (change)="setSort($event)">
@@ -322,7 +351,10 @@
             }
           </select>
         </label>
-      </div>
+      }
+    </div>
+
+    @if (view() === 'overview') {
       <app-deck-overview
         [entries]="entries()"
         [language]="deckLanguage()"
@@ -330,6 +362,8 @@
         [sort]="sort()"
         [legalityFormat]="legalityCheck() ? legalityFormat() : undefined"
         [commanderZone]="deckFormat() === 'commander'"
+        [removeMode]="removingCards()"
+        (removeCard)="removeCard(deck.id, $event)"
         (colorsChange)="setDeckColors(deck.id, $event)"
         (legalityChange)="legality.set($event)"
         (legalityRequested)="legalityOpen.set(true)"
@@ -368,4 +402,8 @@
 
 @if (importMode(); as mode) {
   <app-import-dialog [replacesDeck]="mode === 'replace'" (imported)="onImported($event)" (closed)="importMode.set(undefined)" />
+}
+
+@if (choosingNew()) {
+  <app-new-deck-dialog (closed)="choosingNew.set(false)" />
 }

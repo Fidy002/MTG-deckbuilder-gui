@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, inject, input, linkedSignal, signal } from '@angular/core';
+import { Component, ElementRef, computed, inject, input, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { CardSearch } from '../cards/card-search';
 import { I18nService, TranslationKey, TranslationParams } from '../i18n/i18n.service';
@@ -10,14 +10,22 @@ import { LanguageOption, LanguageSelect } from '../settings/language-select';
 import { cardLanguageOptions } from '../settings/language-settings';
 import { DeckSort, SettingsService } from '../settings/settings.service';
 import { DECK_EXPORT_FORMATS, DeckExportFormat } from './deck-formats';
-import { DeckOverview } from './deck-overview';
+import { DeckOverview, flashAdded, flashWhenReady } from './deck-overview';
 import { CONSTRUCTED_FORMATS, LegalityFix, LegalityIssue, applyLegalityFix, canFix, LegalityResult, legalityFormatLabel, legalityIssueKey, legalityIssueParams } from './deck-legality';
 import { DeckCardsService, cardKey } from './deck-cards.service';
-import { DeckService, countCards, countSideboard } from './deck.service';
-import { DeckFormat, countEntries, detectFormat, parseDecklist, serializeDecklist } from './decklist';
+import { Deck, DeckService, countCards, countSideboard } from './deck.service';
+import { Badge, suggestionBadges } from '../shared/card-badges/card-badges';
+import { categoryRole } from './auto-categories';
+import { DeckAdvice, DeckAdvisor, RankedSuggestion, mixSuggestions, rolesByNeed, suggestionShares } from './deck-advisor';
+import { SuggestionRole } from './deck-suggestions';
+import { DeckFormat, countEntries, detectFormat, parseDecklist, serializeDecklist, DeckEntry } from './decklist';
 import { ImportDialog } from './import-dialog';
-import { BRACKETS, Bracket, BracketEstimate, estimateBracket } from './deck-brackets';
-import { firstValueFrom } from 'rxjs';
+import { NewDeckDialog } from './new-deck-dialog';
+import { BRACKETS, Bracket, estimateBracket } from './deck-brackets';
+import { catchError, debounceTime, distinctUntilChanged, map, of, switchMap, tap } from 'rxjs';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { manaCurve } from './deck-curve';
+import { ManaCurve } from './mana-curve';
 
 type View = 'overview' | 'text';
 
@@ -28,18 +36,15 @@ interface Toast {
 }
 
 const AUTO_LANGUAGE = 'auto';
-const FLASH_TIMEOUT_MS = 4000;
-
-const CARD_FLASH: Keyframe[] = [
-  { transform: 'scale(1.06)', filter: 'brightness(1.35) drop-shadow(0 0 14px var(--color-highlight))', offset: 0.3 },
-];
 const COUNT_FLASH: Keyframe[] = [
   { color: 'var(--color-highlight)', textShadow: '0 0 8px var(--color-highlight)', transform: 'scale(1.15)', offset: 0.3 },
 ];
 
+const SUGGESTIONS_PER_CLICK = 20;
+
 @Component({
   selector: 'app-my-decks',
-  imports: [TranslatePipe, RouterLink, RouterLinkActive, DeckOverview, ImportDialog, LanguageSelect, Flag, CardSearch],
+  imports: [TranslatePipe, RouterLink, RouterLinkActive, DeckOverview, ImportDialog, NewDeckDialog, LanguageSelect, Flag, CardSearch, ManaCurve],
   host: {
     '(document:click)': 'onDocumentClick($event)',
     '(document:keydown.escape)': 'drawerOpen.set(false); legalityOpen.set(false); bracketInfoOpen.set(false)',
@@ -50,6 +55,7 @@ const COUNT_FLASH: Keyframe[] = [
 export class MyDecks {
   private readonly deckService = inject(DeckService);
   private readonly deckCards = inject(DeckCardsService);
+  private readonly advisor = inject(DeckAdvisor);
   private readonly i18n = inject(I18nService);
   private readonly settings = inject(SettingsService);
   private readonly router = inject(Router);
@@ -108,6 +114,26 @@ export class MyDecks {
   protected readonly deck = computed(() => this.decks().find((deck) => deck.id === this.id()));
 
   protected readonly entries = computed(() => parseDecklist(this.deck()?.text ?? ''));
+
+  // The deck's cards as resolved from Scryfall (main deck only), for the mana curve.
+  private readonly mainCards = toSignal(
+    toObservable(computed(() => ({ entries: this.entries().filter((e) => e.section === 'main'), language: this.deckLanguage() }))).pipe(
+      debounceTime(300),
+      switchMap(({ entries, language }) =>
+        entries.length
+          ? this.deckCards.resolve(entries, language).pipe(
+              map((resolved) => entries.flatMap((e) => resolved.get(cardKey(e))?.card ? [{ card: resolved.get(cardKey(e))!.card, count: e.count }] : [])),
+              catchError(() => of([])),
+            )
+          : of([]),
+      ),
+    ),
+  );
+
+  protected readonly deckCurve = computed(() => {
+    const cards = this.mainCards();
+    return cards?.length ? manaCurve(cards) : undefined;
+  });
   // Decks saved before formats existed fall back to the detection used on import.
   protected readonly deckFormat = computed(() => this.deck()?.format ?? detectFormat(this.entries()));
   protected readonly legalityFormat = computed(() =>
@@ -145,27 +171,133 @@ export class MyDecks {
     this.deckCards.remember(entry, this.deckLanguage(), card);
     this.deckService.addCard(deckId, entry);
     this.showToast({ key: 'decks.cardAdded', params: { card: cardDisplayName(card) } });
-    this.flash(`[data-deck-count="${deckId}"]`, COUNT_FLASH);
-    this.flash(`[data-card-key="${CSS.escape(cardKey(entry))}"]`, CARD_FLASH);
+    flashWhenReady(this.host.nativeElement, `[data-deck-count="${deckId}"]`, COUNT_FLASH);
+    flashAdded(this.host.nativeElement, cardKey(entry));
   }
 
-  // Waits until the element exists and its card has loaded, then plays a short highlight animation.
-  private flash(selector: string, keyframes: Keyframe[]): void {
-    const started = Date.now();
-    const duration = parseFloat(getComputedStyle(this.host.nativeElement).getPropertyValue('--added-flash-duration')) || 700;
-    const attempt = () => {
-      const element = this.host.nativeElement.querySelector<HTMLElement>(selector);
-      if (element && !(element as HTMLButtonElement).disabled) {
-        element.animate(keyframes, { duration, easing: 'ease-out' });
-      } else if (Date.now() - started < FLASH_TIMEOUT_MS) {
-        setTimeout(attempt, 100);
+  // Names (lower case) of the cards in the open deck, outside the side- and maybeboard: they show a check in the search.
+  protected readonly deckNames = computed(() => {
+    const deck = this.deck();
+    return new Set(
+      deck ? parseDecklist(deck.text).filter((e) => e.section !== 'sideboard' && e.section !== 'maybeboard').map((e) => e.name.toLowerCase()) : [],
+    );
+  });
+
+  // Remove mode of the overview: clicking a card takes it out of the deck.
+  protected readonly removingCards = signal(false);
+
+  protected removeCard(deckId: string, entry: DeckEntry): void {
+    this.deckService.setCount(deckId, entry, 0);
+    this.showToast({ key: 'decks.cardRemoved', params: { card: entry.name } });
+    if (!this.entries().length) {
+      this.removingCards.set(false);
+    }
+  }
+
+  // Clicking a card in the search adds it to the deck; clicking a card the deck already has takes it out again.
+  protected toggleCard(deckId: string, card: ScryfallCard): void {
+    const deck = this.deck();
+    const name = deckCardName(card).toLowerCase();
+    const inDeck = deck
+      ? parseDecklist(deck.text).filter((e) => e.section !== 'sideboard' && e.section !== 'maybeboard' && e.name.toLowerCase() === name)
+      : [];
+    if (!inDeck.length) {
+      this.addCard(deckId, card);
+      return;
+    }
+    inDeck.forEach((entry) => this.deckService.setCount(deckId, entry, 0));
+    this.showToast({ key: 'decks.cardRemoved', params: { card: cardDisplayName(card) } });
+  }
+
+  protected readonly choosingNew = signal(false);
+
+  // The deck wizard for this deck, starting with its own cards.
+  protected openWizard(id: string): void {
+    this.router.navigate(['/decks', id, 'wizard']);
+  }
+
+  // Suggestions for the open deck, shown in the search row a few at a time; every click shows the next ones.
+  // Each click looks at what the deck misses most right now and searches that role only (once per role and deck).
+  private readonly suggested = signal<
+    { deckId: string; cards: ScryfallCard[]; badges: Map<string, Badge[]> } | undefined
+  >(undefined);
+  private suggestionState?: { deckId: string; advice: DeckAdvice; shown: Set<string> };
+  protected readonly suggesting = signal(false);
+
+  protected readonly suggestionsFailed = signal(false);
+
+  private readonly currentSuggestions = computed(() => {
+    const deck = this.deck();
+    const suggested = this.suggested();
+    return deck && suggested?.deckId === deck.id ? suggested : undefined;
+  });
+  protected readonly suggestions = computed(() => this.currentSuggestions()?.cards);
+  protected readonly suggestionBadges = computed(() => this.currentSuggestions()?.badges);
+
+  protected async suggestCards(deck: Deck, search: CardSearch): Promise<void> {
+    search.clear();
+    this.suggesting.set(true);
+    this.suggestionsFailed.set(false);
+    try {
+      const language = this.deckLanguage();
+      if (this.suggestionState?.deckId !== deck.id) {
+        this.suggestionState = { deckId: deck.id, advice: await this.advisor.advise(deck, language), shown: new Set() };
       }
-    };
-    setTimeout(attempt, 50);
+      const state = this.suggestionState;
+      // What the deck misses right now decides the mix: e.g. more ramp while ramp is missing most.
+      const missing = await this.advisor.missing(deck, state.advice, language);
+      const inDeck = new Set(parseDecklist(deck.text).map((e) => e.name.toLowerCase()));
+      const fresh = (list: RankedSuggestion[]) => list.filter((s) => !inDeck.has(deckCardName(s.card).toLowerCase()) && !state.shown.has(s.card.name));
+      const plans = [state.advice.plan.main, state.advice.plan.backup];
+      const isSynergy = (s: RankedSuggestion) => s.rating.synergies.length > 0 || s.plans.some((id) => plans.includes(id));
+      const order = rolesByNeed(state.advice.targets, missing);
+      const shares = new Map(suggestionShares(order, missing, SUGGESTIONS_PER_CLICK));
+      // Each role is searched once; a role beyond the shares only when the others can't fill the click.
+      const pick = async (): Promise<RankedSuggestion[]> => {
+        const lists: [SuggestionRole, RankedSuggestion[]][] = [];
+        let mixed: RankedSuggestion[] = [];
+        for (const role of order) {
+          if (!shares.has(role) && mixed.length >= SUGGESTIONS_PER_CLICK) {
+            break;
+          }
+          lists.push([role, fresh(await this.advisor.candidates(state.advice, role))]);
+          mixed = mixSuggestions(lists, shares, SUGGESTIONS_PER_CLICK, isSynergy);
+        }
+        return mixed;
+      };
+      let batch = await pick();
+      if (!batch.length) {
+        // Everything was shown once: start over.
+        state.shown.clear();
+        batch = await pick();
+      }
+      batch.forEach((s) => state.shown.add(s.card.name));
+      const commander = state.advice.commander;
+      const badges = new Map(
+        batch.map((s) => [
+          s.card.name,
+          suggestionBadges(this.i18n, {
+            rating: s.rating,
+            plans: s.plans,
+            deckPlans: [state.advice.plan.main, state.advice.plan.backup],
+            commanderName: commander && cardDisplayName(commander),
+            gameChanger: s.card.game_changer,
+            style: s.styleFit ? state.advice.options.style : undefined,
+            role: categoryRole(s.card),
+          }),
+        ]),
+      );
+      const cards = await this.advisor.localize(batch.map((s) => s.card), language);
+      this.suggested.set(batch.length ? { deckId: deck.id, cards, badges } : undefined);
+    } catch {
+      this.suggestionsFailed.set(true);
+    } finally {
+      this.suggesting.set(false);
+    }
   }
 
   protected create(): void {
-    this.router.navigate(['/decks/new']);
+    this.choosingNew.set(true);
   }
 
   protected rename(id: string, event: Event): void {
@@ -257,32 +389,38 @@ export class MyDecks {
 
   protected readonly brackets = BRACKETS;
   protected readonly bracketInfoOpen = signal(false);
-  protected readonly estimating = signal(false);
-  protected readonly bracketEstimate = linkedSignal<string | undefined, BracketEstimate | undefined>({
-    source: this.id,
-    computation: () => undefined,
-  });
+
+  // The bracket follows the cards: a while after each change to a commander deck it is estimated again (from the
+  // cached cards, a newer change cancels it) and stored with the deck.
+  protected readonly bracketEstimate = toSignal(
+    toObservable(
+      computed(() => {
+        const id = this.deck()?.id;
+        const entries = this.entries().filter((e) => e.section === 'commander' || e.section === 'companion' || e.section === 'main');
+        const key = `${id}|${this.deckLanguage()}|${entries.map((e) => `${e.count} ${cardKey(e)}`).join('\n')}`;
+        return { id, entries, language: this.deckLanguage(), key, commander: this.deckFormat() === 'commander' };
+      }),
+    ).pipe(
+      distinctUntilChanged((a, b) => a.key === b.key && a.commander === b.commander),
+      debounceTime(800),
+      switchMap(({ id, entries, language, commander }) =>
+        id && commander && entries.length
+          ? this.deckCards.resolve(entries, language).pipe(
+              map((resolved) => estimateBracket([...resolved.values()].flatMap((r) => (r ? [r.card] : [])))),
+              tap((estimate) => this.deck()?.bracket !== estimate.bracket && this.deckService.setBracket(id, estimate.bracket)),
+              catchError(() => of(undefined)),
+            )
+          : of(undefined),
+      ),
+    ),
+  );
 
   protected bracketLevelKey(bracket: Bracket): TranslationKey {
     return `bracket.level${bracket}`;
   }
 
-  // Clicking the selected bracket again clears it.
-  protected setBracket(id: string, current: Bracket | undefined, bracket: Bracket): void {
-    this.deckService.setBracket(id, current === bracket ? undefined : bracket);
-  }
-
-  protected async estimateBracket(id: string): Promise<void> {
-    this.estimating.set(true);
-    try {
-      const entries = this.entries().filter((e) => e.section === 'commander' || e.section === 'companion' || e.section === 'main');
-      const resolved = await firstValueFrom(this.deckCards.resolve(entries, this.deckLanguage()));
-      const estimate = estimateBracket([...resolved.values()].flatMap((r) => (r ? [r.card] : [])));
-      this.bracketEstimate.set(estimate);
-      this.deckService.setBracket(id, estimate.bracket);
-    } finally {
-      this.estimating.set(false);
-    }
+  protected bracketNameKey(bracket: Bracket): TranslationKey {
+    return `bracket.name${bracket}`;
   }
 
   private showToast(toast: Toast): void {

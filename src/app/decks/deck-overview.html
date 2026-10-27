@@ -27,14 +27,17 @@
 </div>
 
 <div class="groups" [class.hidden]="pending()">
+  <div class="top-glow" [style.left.px]="-boardBleed().left" [style.right.px]="-boardBleed().right"></div>
   <div class="edge-glow left" [style.left.px]="-boardBleed().left" [style.opacity]="edgeGlow()?.side === 'left' ? edgeGlow()!.strength : 0"></div>
   <div class="edge-glow right" [style.right.px]="-boardBleed().right" [style.opacity]="edgeGlow()?.side === 'right' ? edgeGlow()!.strength : 0"></div>
   <div
     class="board"
     #board
+    [class.centered]="centered()"
     [style.margin-left.px]="-boardBleed().left"
     [style.padding-left.px]="boardBleed().left"
     [style.margin-right.px]="-boardBleed().right"
+    [style.padding-right.px]="centered() ? boardBleed().right : null"
     (pointerdown)="startDrag($event, board)"
     (dragstart)="$event.preventDefault()"
     (scroll)="hideHover()"
@@ -91,6 +94,7 @@
           <button
             type="button"
             class="card"
+            [class.loading]="isLoading(card)"
             [attr.data-card-key]="card.key"
             [attr.aria-label]="card.name"
             [disabled]="!card.resolved"
@@ -103,10 +107,11 @@
               [hitHeight]="$last ? '100%' : visibleStrip"
               [disabled]="!card.resolved"
               [marked]="hasCardIssue(card.key)"
+              [danger]="removeMode()"
               [warning]="cardWarning(card.key)"
             >
               @if (card.image) {
-                <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" />
+                <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" (load)="imageLoaded(card.image)" (error)="imageLoaded(card.image)" />
               } @else {
                 <span class="card-placeholder">{{ card.name }}</span>
               }
@@ -186,16 +191,17 @@
 
 <ng-template #zoneCard let-card let-label="label">
   <div class="zone-slot">
-    <button type="button" class="card zone-card" [attr.data-card-key]="card.key" [attr.aria-label]="card.name" [disabled]="!card.resolved" (click)="open(card)">
+    <button type="button" class="card zone-card" [class.loading]="isLoading(card)" [attr.data-card-key]="card.key" [attr.aria-label]="card.name" [disabled]="!card.resolved" (click)="open(card)">
       <app-card-hover
         [name]="card.name"
         [previewImage]="card.largeImage"
         [disabled]="!card.resolved"
         [marked]="hasCardIssue(card.key)"
+        [danger]="removeMode()"
         [warning]="cardWarning(card.key)"
       >
         @if (card.image) {
-          <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" />
+          <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" (load)="imageLoaded(card.image)" (error)="imageLoaded(card.image)" />
         } @else {
           <span class="card-placeholder">{{ card.name }}</span>
         }

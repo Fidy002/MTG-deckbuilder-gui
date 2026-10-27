@@ -17,6 +17,7 @@ export interface ScryfallCardFace {
   oracle_text?: string;
   printed_text?: string;
   image_uris?: ScryfallImageUris;
+  colors?: string[];
 }
 
 export type ScryfallRarity = 'common' | 'uncommon' | 'rare' | 'mythic' | 'special' | 'bonus';
@@ -28,6 +29,8 @@ export interface ScryfallCard {
   name: string;
   printed_name?: string;
   lang: string;
+  // 'placeholder' when Scryfall has no scan of this printing yet.
+  image_status?: string;
   layout: string;
   set: string;
   set_name: string;
@@ -36,6 +39,9 @@ export interface ScryfallCard {
   cmc?: number;
   color_identity?: string[];
   keywords?: string[];
+  produced_mana?: string[];
+  colors?: string[];
+  power?: string;
   legalities?: Record<string, 'legal' | 'not_legal' | 'banned' | 'restricted'>;
   game_changer?: boolean;
   released_at?: string;

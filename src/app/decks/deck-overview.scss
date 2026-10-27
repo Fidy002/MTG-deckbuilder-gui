@@ -30,6 +30,18 @@
   position: relative;
 }
 
+.top-glow {
+  position: absolute;
+  top: 0;
+  z-index: 3;
+  height: 120px;
+  background:
+    linear-gradient(90deg, transparent, var(--color-highlight), transparent) top / 100% 2px no-repeat,
+    radial-gradient(ellipse 60% 100% at center top, rgb(243 237 226 / 0.35), transparent);
+  pointer-events: none;
+  opacity: 0;
+}
+
 // Lights up while the board is dragged against one of its ends.
 .edge-glow {
   position: absolute;
@@ -71,6 +83,11 @@
   &.dragging {
     cursor: grabbing;
     user-select: none;
+  }
+
+  // Same bleed on both sides, so the groups sit in the middle of the screen; "safe" falls back to the left once they overflow.
+  &.centered {
+    justify-content: safe center;
   }
 }
 
@@ -145,6 +162,10 @@ h3 {
 
   &:disabled {
     opacity: 1;
+  }
+
+  &.loading {
+    opacity: 0;
   }
 
   img {
