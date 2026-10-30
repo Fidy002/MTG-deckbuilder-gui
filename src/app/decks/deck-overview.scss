@@ -22,6 +22,15 @@
   padding: var(--space-7) 0;
 }
 
+.images-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-5) 0;
+  --spinner-size: 1.5rem;
+}
+
 .groups.hidden {
   display: none;
 }

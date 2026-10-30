@@ -7,7 +7,7 @@ import { I18nService, TranslationKey, TranslationParams } from '../i18n/i18n.ser
 import { TranslatePipe } from '../i18n/translate.pipe';
 import { Badge, CardBadges, suggestionBadges } from '../shared/card-badges/card-badges';
 import { COLOR_ORDER, ScryfallCard, cardDisplayName, cardFaces, deckCardName, manaSymbolUrl } from '../scryfall/scryfall.models';
-import { SettingsService } from '../settings/settings.service';
+import { DeckSort, SettingsService } from '../settings/settings.service';
 import { CardSearch } from '../cards/card-search';
 import { DeckOverview, flashAdded } from './deck-overview';
 import { CardHover } from '../shared/card-hover/card-hover';
@@ -33,6 +33,7 @@ import {
   recommendColors,
   ColorAdvice,
   pickCommanders,
+  roleStaples,
   preferredSets,
   splitBasics,
   POPULAR_TYPES,
@@ -40,7 +41,7 @@ import {
 } from './deck-suggestions';
 import { categoryRole } from './auto-categories';
 import { CardRating, cardEffects, cardScore, fitsStyle, recommendStyle, cardSynergies, commanderSynergies, roleSynergies } from './deck-synergies';
-import { STYLE_CURVES, STYLE_CURVE_MAX, manaCurve, pickAlongCurve } from './deck-curve';
+import { CurveGoal, STYLE_CURVES, STYLE_CURVE_MAX, manaCurve, pickAlongCurve, roleCurve } from './deck-curve';
 import { ManaCurve } from './mana-curve';
 import { WinPlan, WinconId, cardWincons, planFinishers, recommendPlan, winconQueries } from './deck-wincons';
 import { Deck, DeckService } from './deck.service';
@@ -72,6 +73,9 @@ const COMMANDER_OPTIONS = 18;
 const COMMANDER_PIP_WEIGHT = 3;
 const PLAN_MAIN_SCORE = 2.5;
 const PLAN_BACKUP_SCORE = 1.5;
+// A random share of each card's score, so the suggestions vary between visits: cards that fit about equally well
+// (Mind Stone or a Signet) take turns, while clearly better ones still come first.
+const SUGGESTION_VARIETY = 1.5;
 const MAX_QUOTE = 140;
 const MIN_COLOR_SHARE = 0.1;
 const MAX_COLOR_SHARES = 3;
@@ -79,10 +83,6 @@ const MAX_COLOR_SHARES = 3;
 interface Reason {
   key: TranslationKey;
   params?: TranslationParams;
-}
-
-function signed(value: number): string {
-  return value > 0 ? `+${value}` : `−${Math.abs(value)}`;
 }
 
 interface OwnedCard {
@@ -329,50 +329,6 @@ export class DeckWizard {
 
   protected readonly deckSize = computed(() => (this.format() === 'commander' ? COMMANDER_SIZE : CONSTRUCTED_SIZE));
 
-  protected readonly countReasons = computed((): Reason[] => {
-    const group = this.currentGroup();
-    if (!group) {
-      return [];
-    }
-    const commander = this.format() === 'commander' ? this.commander() : undefined;
-    const commanderName = commander ? this.name(commander) : '';
-    const style = this.i18n.translate(this.styleLabel(this.style()));
-    const recommended = group.recommended ?? 0;
-    if (group.role === 'lands') {
-      return [{ key: 'wizard.reason.lands', params: { count: this.landTarget(), owned: group.owned ?? 0, picks: recommended } }];
-    }
-    if (group.role === 'tutors') {
-      return [{ key: 'wizard.reason.tutors', params: { bracket: this.bracket(), count: recommended } }];
-    }
-    if (group.role !== 'creatures') {
-      return [{ key: 'wizard.reason.roleStyle', params: { style, count: recommended } }];
-    }
-    const reasons: Reason[] = [];
-    for (const factor of group.factors ?? []) {
-      const delta = signed(factor.delta);
-      if (factor.kind === 'style') {
-        reasons.push({ key: 'wizard.reason.style', params: { style, count: factor.delta } });
-      } else if (factor.kind === 'creatureSynergy') {
-        reasons.push({ key: 'wizard.reason.creatureSynergy', params: { commander: commanderName, match: this.quote(commander, factor.match), delta } });
-      } else if (factor.kind === 'spellSynergy') {
-        reasons.push({ key: 'wizard.reason.spellSynergy', params: { commander: commanderName, match: this.quote(commander, factor.match), delta } });
-      } else if (factor.kind === 'space') {
-        reasons.push({ key: 'wizard.reason.space', params: { delta } });
-      } else if (factor.kind === 'styleMax') {
-        reasons.push({ key: 'wizard.reason.styleMax', params: { style, delta } });
-      } else {
-        reasons.push({ key: 'wizard.reason.types', params: { types: this.typeList(group.types ?? []), delta } });
-      }
-    }
-    if (commander && !(group.factors ?? []).some((f) => f.kind === 'creatureSynergy' || f.kind === 'spellSynergy')) {
-      reasons.push({ key: 'wizard.reason.commanderNeutral', params: { commander: commanderName } });
-    }
-    if (group.owned) {
-      reasons.push({ key: 'wizard.reason.owned', params: { count: group.owned, missing: Math.max(0, recommended - group.owned) } });
-    }
-    return reasons;
-  });
-
   private readonly deckTypesShown = computed(() => this.groups().find((g) => g.role === 'creatures')?.types ?? []);
 
   private readonly synergyIds = computed(() =>
@@ -387,17 +343,9 @@ export class DeckWizard {
     const commander = this.format() === 'commander' ? this.commander() : undefined;
     const params = { commander: commander ? this.name(commander) : '', types: this.typeList(this.deckTypesShown()) };
     const tips: Reason[] = roleSynergies(this.synergyIds(), group.role).map((id) => ({ key: `wizard.tip.${id}`, params }));
-    const plan = this.plan();
-    if (plan && group.role === 'creatures') {
-      tips.push({ key: `wizard.planCreatures.${plan.main}`, params });
-    }
+    // The plan itself is in the brief above the categories; here only how far the deck is with it.
     const status = this.planStatus();
     if (status && group.role === 'theme') {
-      const tip = (id: WinconId) => this.i18n.translate(this.winconTip(id), { commander: '' });
-      tips.push({ key: 'wizard.planMainTip', params: { plan: status.label, tip: tip(status.main) } });
-      if (status.backup && status.backupLabel) {
-        tips.push({ key: 'wizard.planBackupTip', params: { plan: status.backupLabel, tip: tip(status.backup) } });
-      }
       tips.push({
         key: status.count < status.target ? 'wizard.planThin' : 'wizard.planReady',
         params: { count: status.count, target: status.target, plan: status.label },
@@ -475,12 +423,17 @@ export class DeckWizard {
       card,
       score:
         cardScore(card, ratings.get(card.name) ?? empty, group.role, this.style(), index, open.length, this.power()) +
-        this.planScore(card),
+        this.planScore(card) +
+        Math.random() * SUGGESTION_VARIETY,
     }));
-    // The picks fill the gaps of the mana curve one by one. A chosen theme is a must: the creatures are of its types,
-    // others only when there are not enough of them.
+    // The picks fill the gaps of the deck's mana curve and of the role's own curve one by one; the finishers are picked
+    // for the plan alone. A chosen theme is a must: the creatures are of its types, others only when there are not enough of them.
+    const finishers = group.role === 'theme';
+    const role = this.roleCurveGoal(group);
     const along = (candidates: typeof scored, count: number) =>
-      pickAlongCurve(candidates, count, this.curve(), this.curveTarget(), this.nonLandTarget(), this.copiesFor(group)).map((p) => p.card);
+      pickAlongCurve(candidates, count, this.curve(), this.curveTarget(), finishers ? 0 : this.nonLandTarget(), this.copiesFor(group), role).map(
+        (p) => p.card,
+      );
     const themes = group.role === 'creatures' ? this.themes() : [];
     const themed = scored.filter((s) => hasCreatureType(s.card, themes));
     const picks = !themes.length
@@ -488,6 +441,21 @@ export class DeckWizard {
       : themed.length >= needed
         ? along(themed, needed)
         : [...themed.map((s) => s.card), ...along(scored.filter((s) => !themed.includes(s)), needed - themed.length)];
+    // The staples of the role (Sol Ring, Command Tower …) are always among the picks, each at a random place.
+    const staples = roleStaples(group.role, { format: this.format(), colors: this.colors() }).flatMap((name) => open.filter((c) => c.name === name));
+    for (const staple of staples) {
+      const at = picks.indexOf(staple);
+      if (at >= 0) {
+        picks.splice(at, 1);
+      } else if (picks.length >= needed) {
+        // The weakest pick that is no staple makes room.
+        const last = picks.map((card) => !staples.includes(card)).lastIndexOf(true);
+        if (last >= 0) {
+          picks.splice(last, 1);
+        }
+      }
+      picks.splice(Math.floor(Math.random() * (picks.length + 1)), 0, staple);
+    }
     // The finishers keep one slot for the backup plan.
     const backup = this.plan()?.backup;
     if (group.role === 'theme' && backup && picks.length >= 2 && !picks.some((card) => this.cardPlans(card).includes(backup))) {
@@ -760,6 +728,57 @@ export class DeckWizard {
   // How the deck wins, recognised from the commander, its abilities and the play style – shown as a tip.
   protected readonly plan = signal<WinPlan | undefined>(undefined);
 
+  /**
+   * How the commander gets strong, shown above every category as a reminder: its key ability, the plan it wins with,
+   * plan B, and what the current category does for that plan.
+   */
+  protected readonly brief = computed(() => {
+    const commander = this.format() === 'commander' ? this.commander() : undefined;
+    const plan = this.plan();
+    if (!commander || !plan) {
+      return undefined;
+    }
+    const brief = this.briefOf(commander, plan);
+    const role = this.currentGroup()?.role;
+    const params = { commander: brief.name, plan: brief.plan, backup: brief.backup ?? brief.plan };
+    const focus: Reason =
+      role === 'creatures'
+        ? { key: `wizard.planCreatures.${plan.main}`, params }
+        : { key: `wizard.focus.${role ?? 'basics'}${role === 'theme' && !brief.backup ? 'Single' : ''}` as TranslationKey, params };
+    return { ...brief, role: role ? this.roleLabel(role) : 'wizard.basicLands', focus };
+  });
+
+  // The same for the commander chosen (or suggested) in the commander step, before the suggestions are loaded.
+  protected readonly commanderBrief = computed(() => {
+    const commander = this.format() === 'commander' ? this.commander() : undefined;
+    return commander && this.briefOf(commander, recommendPlan(this.style(), commanderSynergies(commander, this.deckTypes(commander)), commander));
+  });
+
+  private briefOf(commander: ScryfallCard, plan: WinPlan) {
+    // "Niv-Mizzet, Parun" reads as "Niv-Mizzet" in a sentence.
+    const name = this.name(commander).split(',')[0].trim();
+    return {
+      name,
+      ability: this.keyAbility(commander),
+      plan: this.winconLabel(plan.main),
+      planTip: this.i18n.translate(this.winconTip(plan.main), { commander: name }),
+      backup: plan.backup ? this.winconLabel(plan.backup) : undefined,
+    };
+  }
+
+  // The ability the deck is built around: the first one that triggers, counts or can be activated – not a keyword line.
+  private keyAbility(commander: ScryfallCard): string | undefined {
+    const keywords = new Set((commander.keywords ?? []).map((k) => k.toLowerCase()));
+    const lines = [commander.oracle_text, ...(commander.card_faces ?? []).map((f) => f.oracle_text)]
+      .filter(Boolean)
+      .join('\n')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.split(/,\s*/).every((part) => keywords.has(part.toLowerCase().replace(/ \{.*$| \d+$/, ''))));
+    const engine = lines.find((line) => /^(?:[^—]*— )?(?:whenever|at the beginning|when)\b|you control|:\s/i.test(line)) ?? lines[0];
+    return engine && this.quote(commander, engine).replace(/\.$/, '');
+  }
+
   // The finishers of the main plan so far: commander, own cards and the selected suggestions.
   protected readonly planStatus = computed(() => {
     const plan = this.plan();
@@ -811,6 +830,24 @@ export class DeckWizard {
     return manaCurve([...owned, ...selected]);
   });
   protected readonly curveTarget = computed(() => STYLE_CURVES[this.style()]);
+
+  // The role's own curve: its picks so far (the creatures with the own ones) against what the role should end up with.
+  private roleCurveGoal(group: SuggestionGroup): CurveGoal | undefined {
+    const target = roleCurve(group.role, this.style());
+    const total = group.recommended ?? 0;
+    if (!target || !total) {
+      return undefined;
+    }
+    const commander = this.format() === 'commander' ? this.commander() : undefined;
+    const owned =
+      group.role === 'creatures'
+        ? this.owned().flatMap((o) =>
+            o.card && o.card.name !== commander?.name && o.card.type_line?.includes('Creature') ? [{ card: o.card, count: o.entry.count }] : [],
+          )
+        : [];
+    const taken = this.takenIn(group).map((card) => ({ card, count: this.copiesFor(group) }));
+    return { counts: manaCurve([...owned, ...taken]), target, total };
+  }
   protected readonly nonLandTarget = computed(
     () => this.deckSize() - this.landTarget() - (this.format() === 'commander' && this.commander() ? 1 : 0),
   );
@@ -999,7 +1036,8 @@ export class DeckWizard {
     ),
   );
   protected readonly cardLanguage = this.settings.cardLanguage;
-  protected readonly deckSort = this.settings.deckSort;
+  // The wizard builds along the mana curve, so its overviews are always grouped by mana value (whatever My decks uses).
+  protected readonly deckSort = signal<DeckSort>('mana');
 
   // Cards picked in the search end up in the text list, so both ways can be mixed and edited.
   protected readonly removingOwned = signal(false);
@@ -1117,6 +1155,7 @@ export class DeckWizard {
           creatureTypes: this.deckTypes(undefined),
           preferredSets: this.preferredSets(),
           style: (card) => fitsStyle(card, style),
+          typal: this.themes().length > 0,
         });
         this.shownCommanders.clear();
         this.commanderPool.set(await firstValueFrom(this.suggestionsService.commanders(this.commanderFit(), this.bracket())));

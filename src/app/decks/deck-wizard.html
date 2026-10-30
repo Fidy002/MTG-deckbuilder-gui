@@ -399,31 +399,41 @@
           </div>
         </div>
       }
+      <!-- The own commanders on the left, the chosen one on the right below "Next". -->
+      <!-- The chosen commander and how it gets strong, its card on the right below "Next"; the own commanders below. -->
       @if (commander(); as selected) {
-        <div class="chosen-commander">
-          <app-card-hover [name]="name(selected)" [previewImage]="largeImage(selected)">
+        <section class="chosen-commander">
+          <div class="chosen-info">
+            <span class="caps-label">{{ (commanderPicked() ? 'wizard.chosenCommander' : 'wizard.suggestedCommander') | t }}</span>
+            <h4 class="chosen-name">{{ name(selected) }}</h4>
+            <span class="chosen-meta">
+              <ng-container *ngTemplateOutlet="symbols; context: { $implicit: identityOf(selected) }" />
+              @if (commanderOwned()) {
+                <span class="muted">{{ 'wizard.fromYourCards' | t }}</span>
+              }
+            </span>
+            @if (commanderBrief(); as brief) {
+              <div class="brief">
+                <p class="caps-label">{{ 'wizard.briefTitle' | t: { commander: brief.name } }}</p>
+                <ng-container *ngTemplateOutlet="briefBody; context: { $implicit: brief }" />
+              </div>
+            }
+            @if (!commanderPicked()) {
+              <p class="muted chosen-hint">{{ (owned().length ? 'wizard.suggestedCommanderHint' : 'wizard.bestCommanderHint') | t }}</p>
+            }
+          </div>
+          <app-card-hover class="chosen-card" [name]="name(selected)" [previewImage]="largeImage(selected)">
             @if (image(selected); as src) {
               <img [src]="src" [alt]="name(selected)" width="488" height="680" />
             } @else {
               <span class="card-placeholder">{{ name(selected) }}</span>
             }
           </app-card-hover>
-          <div class="chosen-info">
-            <span class="caps-label">{{ (commanderPicked() ? 'wizard.chosenCommander' : 'wizard.suggestedCommander') | t }}</span>
-            <strong>{{ name(selected) }}</strong>
-            <ng-container *ngTemplateOutlet="symbols; context: { $implicit: identityOf(selected) }" />
-            @if (commanderOwned()) {
-              <span class="muted">{{ 'wizard.fromYourCards' | t }}</span>
-            }
-            @if (!commanderPicked()) {
-              <span class="muted">{{ (owned().length ? 'wizard.suggestedCommanderHint' : 'wizard.bestCommanderHint') | t }}</span>
-            }
-          </div>
-        </div>
+        </section>
       }
       @if (ownedCommanders().length) {
         <p class="caps-label">{{ 'wizard.fromYourCards' | t }}</p>
-        <div class="cards">
+        <div class="cards own-commanders">
           @for (card of ownedCommanders(); track card.id) {
             <ng-container *ngTemplateOutlet="pickCard; context: { $implicit: card, active: commander()?.name === card.name, pick: true }" />
           }
@@ -458,8 +468,20 @@
         <h3>{{ 'wizard.suggestionsTitle' | t }}</h3>
         <span class="caps-label">{{ 'wizard.deckTotal' | t: { count: deckTotal(), size: deckSize() } }}</span>
       </div>
-      <div class="curve-box">
-        <app-mana-curve [counts]="curve()" [target]="curveTarget()" [targetTotal]="nonLandTarget()" [numbers]="false" />
+      <div class="overview-row">
+        @if (brief(); as brief) {
+          <section class="brief" [attr.aria-label]="'wizard.briefTitle' | t: { commander: brief.name }">
+            <p class="caps-label">{{ 'wizard.briefTitle' | t: { commander: brief.name } }}</p>
+            <ng-container *ngTemplateOutlet="briefBody; context: { $implicit: brief }" />
+            <p class="brief-focus">
+              <span class="caps-label">{{ 'wizard.briefNow' | t: { role: (brief.role | t) } }}</span>
+              {{ brief.focus.key | t: brief.focus.params }}
+            </p>
+          </section>
+        }
+        <div class="curve-box">
+          <app-mana-curve [counts]="curve()" [target]="curveTarget()" [targetTotal]="nonLandTarget()" [numbers]="false" />
+        </div>
       </div>
       <ol class="role-steps" role="tablist">
         @for (group of visibleGroups(); track group.role; let i = $index) {
@@ -493,14 +515,6 @@
       </div>
       @if (currentGroup(); as group) {
         <div class="reasons">
-          <div>
-            <p class="caps-label">{{ 'wizard.whyCount' | t }}</p>
-            <ul>
-              @for (reason of countReasons(); track $index) {
-                <li>{{ reason.key | t: reason.params }}</li>
-              }
-            </ul>
-          </div>
           <div>
             <p class="caps-label">{{ 'wizard.tipsTitle' | t }}</p>
             <ul>
@@ -622,6 +636,19 @@
     <p class="status error">{{ 'search.error' | t }}</p>
   }
 </section>
+
+<!-- How the commander gets strong: its key ability, the plan it wins with and plan B. -->
+<ng-template #briefBody let-brief>
+  @if (brief.ability) {
+    <blockquote>„{{ brief.ability }}“</blockquote>
+  }
+  <p class="brief-plan">
+    <strong>{{ brief.plan }}</strong> – {{ brief.planTip }}
+    @if (brief.backup) {
+      <span class="muted">{{ 'wizard.briefBackup' | t: { plan: brief.backup } }}</span>
+    }
+  </p>
+</ng-template>
 
 <ng-template #identityBox let-identity>
   <div class="identity" role="status">

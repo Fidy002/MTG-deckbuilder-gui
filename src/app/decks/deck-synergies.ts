@@ -1,5 +1,6 @@
 import { ScryfallCard } from '../scryfall/scryfall.models';
-import { SuggestionRole } from './deck-suggestions';
+import { effectiveManaValue } from './deck-curve';
+import { SuggestionRole, lordClause } from './deck-suggestions';
 
 export type SynergyId =
   | 'bigCommander'
@@ -14,7 +15,8 @@ export type SynergyId =
   | 'artifacts'
   | 'enchantments'
   | 'planeswalkers'
-  | 'landfall';
+  | 'landfall'
+  | 'creatureSpells';
 
 interface Synergy {
   id: SynergyId;
@@ -48,6 +50,20 @@ function isFrontType(card: ScryfallCard, type: string): boolean {
 const STURDY = ['Indestructible', 'Hexproof', 'Ward', 'Shroud', 'Protection'];
 const BIG_COMMANDER_POWER = 5;
 
+// An ability the deck is built around instead of the commander's own hits: a trigger that is not about its attacks
+// (Niv-Mizzet drawing, Atraxa proliferating, Korvold sacrificing), one that wants it damaged (Smaug), or creature types
+// it cares about (The Ur-Dragon's Dragons).
+const DAMAGE_ENGINE = /whenever [^.]*\bis dealt (?:noncombat )?damage/i;
+const TYPE_MATTERS = /\b(?!Creature|Legendary|Other|Nontoken|Token)[A-Z][a-z]+s? (?:spells you cast|you control)/;
+function hasEngine(card: ScryfallCard): boolean {
+  const text = cardText(card);
+  const triggers = text
+    .split('\n')
+    .map((line) => line.replace(/^[^—\n]*— /, ''))
+    .filter((line) => /^(?:whenever|at the beginning)\b/i.test(line));
+  return triggers.some((line) => !/\battacks?\b|\bcombat damage/i.test(line)) || DAMAGE_ENGINE.test(text) || TYPE_MATTERS.test(text);
+}
+
 const SYNERGIES: readonly Synergy[] = [
   {
     id: 'bigCommander',
@@ -56,7 +72,8 @@ const SYNERGIES: readonly Synergy[] = [
       isType(card, 'Creature') &&
       Number(card.power) >= BIG_COMMANDER_POWER &&
       hasKeyword(card, EVASION) &&
-      hasKeyword(card, [...STURDY, 'Haste']),
+      hasKeyword(card, [...STURDY, 'Haste']) &&
+      !hasEngine(card),
     card: (card, text) =>
       ((isType(card, 'Equipment') || isType(card, 'Aura')) && /equipped creature|enchanted creature/i.test(text)) ||
       /(?:target|creatures?|permanents?) you control[^.]*(?:gains?|have|has) (?:hexproof|indestructible|protection|shroud|double strike)/i.test(text),
@@ -65,7 +82,8 @@ const SYNERGIES: readonly Synergy[] = [
     id: 'tribal',
     roles: ['creatures', 'draw'],
     commander: (text, types) => namesType(text, types),
-    card: (_card, text, types) => namesType(text, types),
+    // Only lords: a creature that merely is of the type plays like any other.
+    card: (_card, text, types) => !!lordClause(text, types),
   },
   {
     id: 'tokens',
@@ -82,7 +100,7 @@ const SYNERGIES: readonly Synergy[] = [
   {
     id: 'attacks',
     roles: ['creatures'],
-    commander: (text) => /whenever [^.]*\battacks?\b/i.test(text),
+    commander: (text) => /whenever [^.]*\battacks?\b|attacking causes/i.test(text),
     card: (card, text) => hasKeyword(card, ['Haste', 'Vigilance', 'Myriad']) || /additional combat|gains? haste/i.test(text),
   },
   {
@@ -100,7 +118,7 @@ const SYNERGIES: readonly Synergy[] = [
   {
     id: 'graveyard',
     roles: ['creatures', 'removal'],
-    commander: (text) => /from your graveyard|\bdies\b|sacrifice/i.test(text),
+    commander: (text) => /from your graveyard|\bdies\b|\bdying\b|sacrifice/i.test(text),
     card: (_card, text) => /from your graveyard|\bdies\b|sacrifice a|mill/i.test(text),
   },
   {
@@ -132,6 +150,13 @@ const SYNERGIES: readonly Synergy[] = [
     roles: ['ramp', 'lands', 'creatures'],
     commander: (text) => /landfall|whenever a land (?:you control )?enters/i.test(text),
     card: (card, text) => hasKeyword(card, ['Landfall']) || /search your library for [^.]*lands?|play an additional land|landfall/i.test(text),
+  },
+  {
+    // A commander that rewards casting creatures (Chulane): creatures with a strong effect when they enter.
+    id: 'creatureSpells',
+    roles: ['creatures'],
+    commander: (text) => /whenever you cast a creature spell|creature spells you cast/i.test(text),
+    card: (card, text) => isFrontType(card, 'Creature') && /when [^.]* enters/i.test(text),
   },
 ];
 
@@ -274,10 +299,17 @@ function carriesTheDeck(card: ScryfallCard): boolean {
   return isVoltronLegend(card) && Number(card.power) >= BIG_COMMANDER_POWER && hasKeyword(card, STURDY);
 }
 
-// A legend that can win on its own once it is pumped and protected: evasive and already hitting hard.
+// A legend that can win on its own once it is pumped and protected: evasive and already hitting hard – unless it has
+// an engine (see hasEngine): then the deck is built around that, not around pumping it.
 const VOLTRON_LEGEND_POWER = 4;
 function isVoltronLegend(card: ScryfallCard): boolean {
-  return isType(card, 'Legendary') && isFrontType(card, 'Creature') && Number(card.power) >= VOLTRON_LEGEND_POWER && hasKeyword(card, EVASION);
+  return (
+    isType(card, 'Legendary') &&
+    isFrontType(card, 'Creature') &&
+    Number(card.power) >= VOLTRON_LEGEND_POWER &&
+    hasKeyword(card, EVASION) &&
+    !hasEngine(card)
+  );
 }
 
 const STYLE_ADVICE_FITS: Record<string, (card: ScryfallCard, text: string) => boolean> = {
@@ -361,7 +393,18 @@ export function cardScore(
   total: number,
   bracket = 0,
 ): number {
-  const cmc = card.cmc ?? 0;
+  const cmc = effectiveManaValue(card);
+  const popularity = (total - index) / Math.max(1, total);
+  if (role === 'ramp') {
+    // Mana is judged as mana alone: a real mana source (mana enchantments before rocks), as cheap as possible – the
+    // play style or synergies must not bring in equipment or treasure makers that merely make mana on the side.
+    return manaSourceScore(card) - cmc / 2 - Math.max(0, cmc - 2) + powerScore(card, bracket) + popularity;
+  }
+  if (role === 'removal') {
+    // Removal is judged by how directly and how cheaply it answers a threat: a 2 mana "destroy target creature" beats
+    // a 5 mana one with extra effects, so neither side effects nor the play style count here.
+    return removalScore(cardText(card)) - cmc * 0.75 - Math.max(0, cmc - 2) + powerScore(card, bracket) + popularity;
+  }
   let curve = 0;
   if (role === 'creatures' && (style === 'aggro' || style === 'goWide')) {
     curve = cmc <= 3 ? 1 : cmc >= 5 ? -1.5 : 0;
@@ -371,7 +414,28 @@ export function cardScore(
     curve = cmc >= 6 ? -1 : 0;
   }
   const styleFit = fitsStyle(card, style) ? STYLE_FIT_SCORE : 0;
-  return rating.synergies.length * 3 + styleFit + rating.effects.length + curve + powerScore(card, bracket) + (total - index) / Math.max(1, total);
+  return rating.synergies.length * 3 + styleFit + rating.effects.length + curve + powerScore(card, bracket) + popularity;
+}
+
+// How directly a card removes something: "Destroy/Exile target creature." without a condition counts most, then the
+// targeted spells of the other colors (damage, fight, bite, turning it into a token); conditional answers least.
+const DIRECT_REMOVAL = /\b(?:destroy|exile) target (?:creature|permanent|nonland permanent|artifact or creature|creature or planeswalker|creature or enchantment|artifact, creature, or enchantment|creature an opponent controls|creature or vehicle)\./i;
+const TARGETED_REMOVAL =
+  /deals? (?:\d+|x) damage to (?:target creature|any target|target creature or planeswalker)|fights? (?:up to one )?target creature|damage equal to its power to target creature|(?:destroy|exile) target (?:[\w-]+ )*?(?:creature|permanent)|target creature (?:an opponent controls )?(?:loses all abilities and )?becomes a/i;
+
+function removalScore(text: string): number {
+  return DIRECT_REMOVAL.test(text) ? 4 : TARGETED_REMOVAL.test(text) ? 2 : 0;
+}
+
+// Mana every turn without strings attached: a land aura that adds mana, or a rock whose own ability is "{T}: Add …"
+// (or a Signet's "{1}, {T}: Add …").
+function manaSourceScore(card: ScryfallCard): number {
+  const type = card.type_line ?? '';
+  const text = card.oracle_text ?? '';
+  if (type.includes('Enchantment') && /enchanted land is tapped for mana/i.test(text)) {
+    return 4;
+  }
+  return type.includes('Artifact') && !type.includes('Creature') && /^(?:\{\d\}, )?\{T\}: Add/m.test(text) ? 3 : 0;
 }
 
 // High brackets want the strongest cards: Game Changers above all, then mythics and rares.

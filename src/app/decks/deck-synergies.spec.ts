@@ -1,5 +1,5 @@
 import { ScryfallCard } from '../scryfall/scryfall.models';
-import { cardEffects, cardScore, commanderStyle, fitsStyle, recommendStyle, cardSynergies, commanderSynergies, roleSynergies } from './deck-synergies';
+import { CardRating, cardEffects, cardScore, commanderStyle, fitsStyle, recommendStyle, cardSynergies, commanderSynergies, roleSynergies } from './deck-synergies';
 
 const card = (oracle_text: string, extra: Partial<ScryfallCard> = {}) => ({ name: 'Card', oracle_text, ...extra }) as ScryfallCard;
 
@@ -18,6 +18,52 @@ describe('deck synergies', () => {
   it('keeps the synergies that matter for a role', () => {
     expect(roleSynergies(['tribal', 'tokens', 'combatDamage'], 'draw')).toEqual(['tribal', 'tokens']);
     expect(roleSynergies(['tribal', 'tokens', 'combatDamage'], 'removal')).toEqual([]);
+  });
+
+  it('prefers direct removal: destroy or exile without a condition, then targeted damage, fight or bite', () => {
+    const empty: CardRating = { synergies: [], effects: [] };
+    const score = (text: string, type_line = 'Instant') => cardScore(card(text, { type_line, cmc: 1 }), empty, 'removal', 'midrange', 0, 10);
+    const swords = score('Exile target creature. Its controller gains life equal to its power.');
+    const bolt = score('Lightning Bolt deals 3 damage to any target.');
+    const doomBlade = score('Destroy target nonblack creature.');
+    const edict = score('Each opponent sacrifices a creature.');
+    expect(swords).toBeGreaterThan(bolt);
+    expect(bolt).toBeGreaterThanOrEqual(doomBlade);
+    expect(doomBlade).toBeGreaterThan(edict);
+    expect(score('Destroy target permanent. Its controller creates a 3/3 green Beast creature token.')).toBe(swords);
+    // A cheap direct answer beats an expensive one with extra effects, whatever the synergies.
+    const murder = cardScore(card('Destroy target creature.', { type_line: 'Instant', cmc: 2 }), empty, 'removal', 'midrange', 9, 10);
+    const rider = cardScore(
+      card('Lifelink\nWhen this creature enters, destroy target creature. You draw a card.', { type_line: 'Creature', cmc: 5 }),
+      { synergies: ['graveyard'], effects: ['draw', 'etb'] },
+      'removal',
+      'voltron',
+      0,
+      10,
+    );
+    expect(murder).toBeGreaterThan(rider);
+  });
+
+  it('prefers real mana sources for ramp, cheap ones first, whatever the style', () => {
+    const empty: CardRating = { synergies: [], effects: [] };
+    const score = (text: string, extra: Partial<ScryfallCard>, rating = empty, style = 'midrange') =>
+      cardScore(card(text, extra), rating, 'ramp', style, 0, 10);
+    const growth = score('Enchant land\nWhenever enchanted land is tapped for mana, its controller adds an additional {G}.', { type_line: 'Enchantment — Aura', cmc: 1 });
+    const solRing = score('{T}: Add {C}{C}.', { type_line: 'Artifact', cmc: 1 });
+    const mindStone = score('{T}: Add {C}.\n{1}, {T}, Sacrifice Mind Stone: Draw a card.', { type_line: 'Artifact', cmc: 2 });
+    const pickaxe = score(
+      'Equipped creature gets +1/+1.\nWhenever equipped creature deals combat damage to a player, create a Treasure token.\nEquip {2}',
+      { type_line: 'Artifact — Equipment', cmc: 1 },
+      { synergies: ['combatDamage'], effects: ['mana'] },
+      'voltron',
+    );
+    const altar = score('Sacrifice a creature: Add {C}{C}.', { type_line: 'Artifact', cmc: 3 });
+    expect(growth).toBeGreaterThan(solRing);
+    expect(solRing).toBeGreaterThan(mindStone);
+    expect(score('{1}, {T}: Add {B}{R}.', { type_line: 'Artifact', cmc: 2 })).toBeGreaterThan(pickaxe);
+    expect(mindStone).toBeGreaterThan(pickaxe);
+    expect(mindStone).toBeGreaterThan(altar);
+    expect(mindStone).toBeGreaterThan(score('{T}: Add {C}{C}{C}.', { type_line: 'Artifact', cmc: 4 }));
   });
 
   it('finds the cards that play into the commander', () => {
@@ -103,12 +149,13 @@ describe('play style fit', () => {
     const desire = card('Add {R} for each artifact your opponents control.', { type_line: 'Sorcery', cmc: 4 });
     expect(recommendStyle([smaug, hoard, desire])).toEqual({ style: 'bigMana', count: 3, total: 3 });
     const sword = card('Equipped creature gets +2/+2.\nEquip {2}', { type_line: 'Artifact — Equipment', cmc: 2 });
-    expect(recommendStyle([smaug, sword, card('Draw a card.', { type_line: 'Sorcery', cmc: 2 })])?.style).toBe('voltron');
+    expect(recommendStyle([sword, sword, card('Draw a card.', { type_line: 'Sorcery', cmc: 2 })])?.style).toBe('voltron');
     const goblin = card('Haste', { type_line: 'Creature — Goblin', cmc: 1, keywords: ['Haste'] });
     expect(recommendStyle([goblin, goblin, desire])?.style).toBe('aggro');
-    // Its Treasures are no token army: as a commander, Smaug carries a voltron deck.
+    // Its Treasures are no token army, and it is no voltron commander either: its ability wants it to be damaged.
     const tokens = card('Create two 1/1 white Soldier creature tokens.', { type_line: 'Sorcery', cmc: 3 });
-    expect(commanderStyle(smaug, [smaug, tokens, desire])).toBe('voltron');
+    expect(commanderStyle(smaug, [smaug, tokens, desire])).not.toBe('voltron');
+    expect(commanderStyle(smaug, [smaug, tokens, desire])).not.toBe('goWide');
   });
 });
 

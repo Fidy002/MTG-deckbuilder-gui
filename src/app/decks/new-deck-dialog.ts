@@ -21,7 +21,7 @@ export class NewDeckDialog {
 
   protected openWizard(): void {
     this.closed.emit();
-    this.router.navigate(['/decks/new']);
+    this.router.navigate(['/assistent']);
   }
 
   protected createEmpty(): void {

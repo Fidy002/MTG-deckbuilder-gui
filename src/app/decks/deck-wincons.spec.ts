@@ -1,6 +1,6 @@
 import { ScryfallCard } from '../scryfall/scryfall.models';
 import { commanderSynergies } from './deck-synergies';
-import { cardWincons, deckWincons, planFinishers, recommendPlan, winconQueries } from './deck-wincons';
+import { cardWincons, commanderWincons, deckWincons, planFinishers, recommendPlan, winconQueries } from './deck-wincons';
 
 const card = (name: string, oracle_text: string, extra: Partial<ScryfallCard> = {}) => ({ name, oracle_text, ...extra }) as ScryfallCard;
 
@@ -49,15 +49,56 @@ describe('win conditions', () => {
 });
 
 describe('big commander', () => {
-  it('builds around a big, sturdy commander instead of treasure tokens as a token army', () => {
+  it('builds around what the ability of the commander needs: damage to Smaug, then rewards for its Treasures', () => {
     const smaug = card('Smaug the Impenetrable', 'Flying, indestructible, haste\nWhenever Smaug is dealt noncombat damage, create that many Treasure tokens.', {
       type_line: 'Legendary Creature — Dragon',
       power: '8',
       keywords: ['Flying', 'Indestructible', 'Treasure', 'Haste'],
     });
     const synergies = commanderSynergies(smaug, ['Dragon']);
-    expect(synergies).toContain('bigCommander');
+    // Big and sturdy, but its ability is the engine: no voltron commander.
+    expect(synergies).not.toContain('bigCommander');
     expect(synergies).not.toContain('tokens');
-    expect(recommendPlan('midrange', synergies, smaug)).toEqual({ main: 'commanderDamage', backup: 'treasure' });
+    expect(recommendPlan('midrange', synergies, smaug)).toEqual({ main: 'selfDamage', backup: 'treasurePayoff' });
+    // A Treasure maker plays into the plan of a commander that rewards Treasures, not into Smaug's.
+    const maker = card('Professional Face-Breaker', 'Menace\nWhenever one or more creatures you control deal combat damage to a player, create a Treasure token.');
+    expect(cardWincons(maker)).toContain('treasure');
+    expect(cardWincons(maker)).not.toContain('treasurePayoff');
+    const devil = card('Mayhem Devil', 'Whenever a player sacrifices a permanent, Mayhem Devil deals 1 damage to any target.');
+    expect(cardWincons(devil)).toContain('selfDamage');
+    expect(cardWincons(card('Blasphemous Act', 'Blasphemous Act deals 13 damage to each creature.'))).toContain('selfDamage');
+    const magnificent = card('Smaug the Magnificent', 'Flying, haste\nWhenever Smaug attacks, he deals damage equal to the number of Treasures you control to any target.\nAt the beginning of your upkeep, create a Treasure token.');
+    expect(commanderWincons(magnificent)).toContain('treasure');
+  });
+});
+
+describe('popular commanders', () => {
+  const legend = (name: string, text: string, power: string, keywords: string[]) =>
+    card(name, text, { type_line: 'Legendary Creature — Dragon', power, keywords });
+  const plan = (commander: ScryfallCard, style: Parameters<typeof recommendPlan>[0] = 'midrange') =>
+    recommendPlan(style, commanderSynergies(commander), commander);
+
+  it('builds Niv-Mizzet around drawing cards, not around attacking', () => {
+    const niv = legend(
+      'Niv-Mizzet, Parun',
+      "This spell can't be countered.\nFlying\nWhenever you draw a card, Niv-Mizzet, Parun deals 1 damage to any target.\nWhenever a player casts an instant or sorcery spell, you draw a card.",
+      '5',
+      ['Flying'],
+    );
+    expect(commanderSynergies(niv)).not.toContain('bigCommander');
+    expect(plan(niv)).toEqual({ main: 'drawEngine', backup: 'storm' });
+  });
+
+  it('finds the death triggers of Teysa and the creature spells of Chulane', () => {
+    const teysa = card(
+      'Teysa Karlov',
+      'If a creature dying causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.\nCreature tokens you control have vigilance and lifelink.',
+    );
+    expect(plan(teysa).main).toBe('aristocrats');
+    const chulane = card(
+      'Chulane, Teller of Tales',
+      "Vigilance\nWhenever you cast a creature spell, draw a card, then you may put a land card from your hand onto the battlefield.\n{3}, {T}: Return target creature you control to its owner's hand.",
+    );
+    expect(plan(chulane).main).toBe('blink');
   });
 });

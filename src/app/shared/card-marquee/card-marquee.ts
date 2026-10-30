@@ -25,7 +25,7 @@ function marqueeImages(cards: readonly ScryfallCard[]): string[] {
 
 // The new track drifts in step with the oldest one: its animation takes over the same start time.
 async function syncDrift(host: HTMLElement): Promise<void> {
-  const animations = [...host.querySelectorAll('.track')].flatMap((track) => track.getAnimations());
+  const animations = [...host.querySelectorAll('.track')].flatMap((track) => track.getAnimations?.() ?? []);
   const [reference, ...others] = animations;
   if (!reference) {
     return;
@@ -42,11 +42,11 @@ async function syncDrift(host: HTMLElement): Promise<void> {
     @for (layer of layers(); track layer.id) {
       <div class="track" [class.leaving]="layer.leaving">
         <!-- The pictures twice in a row: when the track has moved by half, it looks exactly like at the start. -->
-        @for (src of layer.images; track $index) {
-          <img [src]="src" alt="" width="626" height="457" decoding="async" [class.loaded]="loaded().has(layer.id + '|' + src)" (load)="markLoaded(layer.id + '|' + src)" />
+        @for (src of shown(layer.images); track $index) {
+          <img [src]="src" alt="" width="626" height="457" decoding="async" [class.loaded]="loaded().has(layer.id + '|' + src)" (load)="markLoaded(layer.id + '|' + src)" (error)="markFailed(src)" />
         }
-        @for (src of layer.images; track $index) {
-          <img [src]="src" alt="" width="626" height="457" decoding="async" [class.loaded]="loaded().has(layer.id + '|' + src)" (load)="markLoaded(layer.id + '|' + src)" />
+        @for (src of shown(layer.images); track $index) {
+          <img [src]="src" alt="" width="626" height="457" decoding="async" [class.loaded]="loaded().has(layer.id + '|' + src)" (load)="markLoaded(layer.id + '|' + src)" (error)="markFailed(src)" />
         }
       </div>
     }
@@ -130,6 +130,8 @@ export class CardMarquee {
   protected readonly layers = signal<{ id: number; images: string[]; leaving: boolean }[]>([]);
   // A picture fades in once it has loaded, instead of popping up.
   protected readonly loaded = signal(new Set<string>());
+  // Pictures that could not be loaded (e.g. the image server refuses them) leave the track instead of leaving a gap.
+  private readonly failed = signal(new Set<string>());
 
   constructor() {
     const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
@@ -156,5 +158,14 @@ export class CardMarquee {
 
   protected markLoaded(src: string): void {
     this.loaded.update((loaded) => new Set(loaded).add(src));
+  }
+
+  protected markFailed(src: string): void {
+    this.failed.update((failed) => new Set(failed).add(src));
+  }
+
+  protected shown(images: readonly string[]): readonly string[] {
+    const failed = this.failed();
+    return failed.size ? images.filter((src) => !failed.has(src)) : images;
   }
 }

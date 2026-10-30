@@ -2,11 +2,31 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { ScryfallCard } from '../scryfall/scryfall.models';
 import { ScryfallService } from '../scryfall/scryfall.service';
-import { DeckSuggestions, basicLands, bestCommander, interleave, manaPips, recommendColors, splitBasics, commanderQuery, deckCreatureTypes, commanderFit, newerFirst, pickCommanders, pickSuggestions, preferredSets, creatureRecommendation, hasCreatureType, isTypal, recommendedCreatures, styleCreatureQuery, roleCounts, roleQuery, setQuery, tribalQuery, typeQuery } from './deck-suggestions';
+import { DeckSuggestions, roleStaples, MANA_ENCHANTMENT_QUERY, MANA_ROCK_QUERY, basicLands, cheapestFirst, bestCommander, interleave, manaPips, recommendColors, splitBasics, commanderQuery, deckCreatureTypes, commanderFit, newerFirst, pickCommanders, pickSuggestions, preferredSets, creatureRecommendation, hasCreatureType, isTypal, recommendedCreatures, styleCreatureQuery, roleCounts, roleQuery, setQuery, tribalQuery, typeQuery } from './deck-suggestions';
 
 const card = (name: string, oracle_text = '', game_changer = false) => ({ name, oracle_text, game_changer }) as unknown as ScryfallCard;
 
 describe('deck suggestions', () => {
+  it('suggests the mana first, mana enchantments and rocks cheapest first', async () => {
+    expect(roleCounts({ format: 'commander', colors: ['G'], exclude: [] })[0].role).toBe('ramp');
+    const cheap = [{ name: 'Big', cmc: 4 }, { name: 'One', cmc: 1 }, { name: 'Two', cmc: 2 }, { name: 'Other One', cmc: 1 }] as ScryfallCard[];
+    expect(cheapestFirst(cheap).map((c) => c.name)).toEqual(['One', 'Other One', 'Two', 'Big']);
+    const findPopularCards = vi.fn((_query: string) => of([] as ScryfallCard[]));
+    TestBed.configureTestingModule({ providers: [{ provide: ScryfallService, useValue: { findPopularCards } }] });
+    const service = TestBed.inject(DeckSuggestions);
+    const options = { format: 'commander', colors: ['G'], exclude: [] };
+    await firstValueFrom(service.group(service.roles(options)[0], options));
+    const queries = findPopularCards.mock.calls.map(([query]) => query);
+    expect(queries[0]).toContain('!"Sol Ring"');
+    expect(queries[1]).toContain(MANA_ENCHANTMENT_QUERY);
+    expect(queries[2]).toContain(MANA_ROCK_QUERY);
+    expect(queries).toHaveLength(3);
+    expect(roleStaples('lands', { format: 'commander', colors: ['R'] })).toEqual([]);
+    expect(roleStaples('lands', { format: 'commander', colors: ['B', 'R'] })).toEqual(['Command Tower']);
+    expect(roleStaples('ramp', { format: 'standard', colors: ['B', 'R'] })).toEqual([]);
+    expect(queries.every((query) => !query.includes('otag:ramp'))).toBe(true);
+  });
+
   it('builds Scryfall queries for color identity, format and bracket', () => {
     expect(commanderQuery(['R', 'G'], 2)).toBe('is:commander legal:commander id>=rg -is:gamechanger');
     expect(commanderQuery([], 4)).toBe('is:commander legal:commander');
@@ -129,6 +149,15 @@ describe('deck suggestions', () => {
     expect(bestCommander([red], [popular], fit)?.name).toBe('Popular');
     expect(bestCommander([], [popular, mine], { colors: [] }, () => 0.5)?.name).toBe('Popular');
     expect(bestCommander([], [], { colors: [] })).toBeUndefined();
+    // Without a chosen theme, an own commander is the suggestion – not one that names the type of the own cards, not even a lord.
+    const rivaz = { ...lord, name: 'Rivaz', oracle_text: 'Spend this mana only to cast Elf creature spells.' } as ScryfallCard;
+    expect(bestCommander([mine], [rivaz], { ...fit, typal: false })?.name).toBe('Mine');
+    expect(bestCommander([mine], [lord], { ...fit, typal: false })?.name).toBe('Mine');
+    // An older own commander is not pushed aside by a newer one that fits just as well.
+    const legend = (name: string, released_at: string) =>
+      ({ name, type_line: 'Legendary Creature — Dragon', oracle_text: '', released_at, color_identity: ['U', 'B', 'R'] }) as unknown as ScryfallCard;
+    const bolas = legend('Nicol Bolas, the Ravager', '2018-07-13');
+    expect(bestCommander([bolas], [legend('Newer', new Date().toISOString().slice(0, 10))], { colors: ['U', 'B', 'R'] })?.name).toBe(bolas.name);
   });
 
   it('varies the suggested commander among equally good ones and prefers the play style', () => {
@@ -256,7 +285,8 @@ describe('win plan', () => {
     expect(isTypal({ ...base, themeTypes: ['Kavu'] })).toBe(true);
     expect(isTypal({ ...base, commander: { ...kavu, oracle_text: 'Other Kavu you control get +1/+1.' } })).toBe(true);
     const smaug = { name: 'Smaug the Magnificent', type_line: 'Legendary Creature — Dragon', oracle_text: 'Flying, haste' } as ScryfallCard;
-    expect(isTypal({ ...base, commander: smaug, creatureTypes: ['Dragon'] })).toBe(true);
+    expect(isTypal({ ...base, commander: smaug, creatureTypes: ['Dragon'] })).toBe(false);
+    expect(isTypal({ ...base, commander: { ...kavu, oracle_text: 'Search your library for a Kavu card.' } })).toBe(false);
     expect(hasCreatureType({ name: 'Goldspan Dragon', type_line: 'Creature — Dragon' } as ScryfallCard, ['Dragon'])).toBe(true);
     expect(hasCreatureType({ name: 'Changeling Outcast', type_line: 'Creature — Shapeshifter', keywords: ['Changeling'] } as ScryfallCard, ['Dragon'])).toBe(true);
     expect(hasCreatureType({ name: 'Ragavan', type_line: 'Legendary Creature — Monkey Pirate' } as ScryfallCard, ['Dragon'])).toBe(false);

@@ -617,6 +617,64 @@
   padding-top: var(--space-2);
 }
 
+// How the commander gets strong on the left, the mana curve on the right; stacked on narrow screens.
+.overview-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4) var(--space-6);
+
+  .curve-box {
+    flex: 0 0 260px;
+    margin-left: auto;
+
+    app-mana-curve {
+      flex: 1 1 auto;
+    }
+  }
+
+  @media (max-width: 900px) {
+    flex-direction: column;
+    align-items: stretch;
+
+    .curve-box {
+      margin-left: 0;
+    }
+  }
+}
+
+.brief {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  max-width: 62ch;
+  padding: var(--space-3) var(--space-4);
+  border-left: var(--line-width) solid var(--color-accent);
+  font-size: var(--text-sm);
+
+  p,
+  blockquote {
+    margin: 0;
+    font-weight: 400;
+  }
+
+  blockquote {
+    font-style: italic;
+    color: var(--color-text-muted);
+  }
+
+  .muted {
+    display: block;
+    margin-top: var(--space-1);
+  }
+
+  .brief-focus .caps-label {
+    display: block;
+    margin-bottom: var(--space-1);
+    color: var(--color-accent-strong);
+  }
+}
+
 .curve-box {
   display: flex;
   flex-wrap: wrap;
@@ -1025,15 +1083,23 @@ textarea {
   margin-left: auto;
 }
 
+.own-commanders {
+  justify-content: flex-start;
+}
+
+// The card lines up with the right edge below "Next", its info below it, so the own cards keep the room on the left.
+// The chosen commander: who it is and how it gets strong on the left, its card on the right below "Next".
 .chosen-commander {
   display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-2);
+  align-items: flex-start;
+  gap: var(--space-5);
+  padding: var(--space-2) 0 var(--space-4);
+  border-bottom: var(--line-width) solid var(--color-line);
 
-  app-card-hover {
-    flex: 0 0 200px;
-    width: 200px;
+  .chosen-card {
+    flex: 0 0 220px;
+    width: 220px;
+    margin-left: auto;
 
     img {
       display: block;
@@ -1041,16 +1107,45 @@ textarea {
       height: auto;
     }
   }
+
+  @media (max-width: 700px) {
+    flex-direction: column-reverse;
+    align-items: stretch;
+
+    .chosen-card {
+      margin: 0 auto;
+    }
+  }
 }
 
 .chosen-info {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 
-  strong {
-    font-size: 1.25rem;
+  .chosen-name {
+    margin: 0;
+    font-size: 1.4rem;
   }
+
+  .brief {
+    max-width: 62ch;
+    margin-top: var(--space-2);
+  }
+
+  .chosen-hint {
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+}
+
+.chosen-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
 }
 
 .commander-head {

@@ -111,7 +111,7 @@
               [warning]="cardWarning(card.key)"
             >
               @if (card.image) {
-                <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" (load)="imageLoaded(card.image)" (error)="imageLoaded(card.image)" />
+                <img [src]="card.image" [alt]="card.name" width="488" height="680" (load)="imageLoaded(card.image)" (error)="imageLoaded(card.image)" />
               } @else {
                 <span class="card-placeholder">{{ card.name }}</span>
               }
@@ -131,6 +131,12 @@
     </section>
   }
   </div>
+  @if (imagesLoading()) {
+    <div class="images-loading" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      <span class="caps-label">{{ 'overview.loadingImages' | t }}</span>
+    </div>
+  }
 </div>
 
 @if (selected(); as card) {
@@ -201,7 +207,7 @@
         [warning]="cardWarning(card.key)"
       >
         @if (card.image) {
-          <img [src]="card.image" [alt]="card.name" loading="lazy" width="488" height="680" (load)="imageLoaded(card.image)" (error)="imageLoaded(card.image)" />
+          <img [src]="card.image" [alt]="card.name" width="488" height="680" (load)="imageLoaded(card.image)" (error)="imageLoaded(card.image)" />
         } @else {
           <span class="card-placeholder">{{ card.name }}</span>
         }

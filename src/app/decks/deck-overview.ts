@@ -199,6 +199,13 @@ export class DeckOverview {
     return !!card.image && !this.loadedImages().has(card.image);
   }
 
+  // Whether pictures of the shown cards are still on their way; one spinner below the board stands for all of them.
+  protected readonly imagesLoading = computed(() => {
+    const zone = this.zone();
+    const shown = [...this.groups().flatMap((g) => g.cards), ...(zone ? [...zone.commanders, ...zone.companions] : [])];
+    return shown.some((card) => this.isLoading(card));
+  });
+
   protected readonly groups = computed(() => {
     const cards = this.cards();
     const language = this.language();

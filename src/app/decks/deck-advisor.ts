@@ -27,7 +27,9 @@ import { Deck } from './deck.service';
 import { DeckEntry, detectFormat, parseDecklist } from './decklist';
 
 // The wizard searches the deck's creature types first; with one search per role they are lifted in the ranking instead.
+// A chosen theme makes its creature types the top priority; a lord commander only adds a little.
 const TYPAL_SCORE = 2;
+const THEME_TYPE_SCORE = 10;
 
 export interface RankedSuggestion {
   // English printing.
@@ -201,14 +203,15 @@ export class DeckAdvisor {
     // Unlike in the wizard, a synergy with the commander counts in every role: the deck mostly misses other roles than
     // the ones its synergies are made for (a lifegain card is one whether it is filed under the theme or removal).
     const roleIds = role === 'lands' ? roleSynergies(advice.synergies, role) : advice.synergies;
-    const types = role === 'creatures' && (advice.synergies.includes('tribal') || isTypal(options)) ? (options.creatureTypes ?? []) : [];
-    const typal = (card: ScryfallCard) => (types.length && hasCreatureType(card, types) ? TYPAL_SCORE : 0);
+    const types = role === 'creatures' && isTypal(options) ? (options.creatureTypes ?? []) : [];
+    const typeScore = options.themeTypes?.length ? THEME_TYPE_SCORE : TYPAL_SCORE;
+    const typal = (card: ScryfallCard) => (types.length && hasCreatureType(card, types) ? typeScore : 0);
     const ranked = group.cards
       .map((card, index) => {
         const rating = { synergies: cardSynergies(card, roleIds, options.creatureTypes ?? []), effects: cardEffects(card, role, options.colors) };
         const score =
           cardScore(card, rating, role, style, index, group.cards.length, options.bracket ?? 0) +
-          curveScore(card, advice.curve, STYLE_CURVES[style], advice.nonLands) +
+          (role === 'theme' ? 0 : curveScore(card, advice.curve, STYLE_CURVES[style], advice.nonLands)) +
           typal(card);
         return { suggestion: { card, rating, plans: cardWincons(card), styleFit: fitsStyle(card, style) }, score };
       })

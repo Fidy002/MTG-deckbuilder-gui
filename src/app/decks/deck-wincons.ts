@@ -14,6 +14,7 @@ export type WinconId =
   | 'energy'
   | 'madness'
   | 'wheels'
+  | 'drawEngine'
   | 'discard'
   | 'pillowfort'
   | 'stax'
@@ -22,6 +23,7 @@ export type WinconId =
   | 'clones'
   | 'blink'
   | 'enterDamage'
+  | 'selfDamage'
   | 'damageDoubler'
   | 'lifegain'
   | 'aristocrats'
@@ -36,6 +38,7 @@ export type WinconId =
   | 'landfall'
   | 'counters'
   | 'treasure'
+  | 'treasurePayoff'
   | 'artifacts'
   | 'typal'
   | 'tokens'
@@ -54,11 +57,18 @@ interface Wincon {
   query: string;
   // Recognises the plan in a card's rules text (commander and own cards).
   card: (card: ScryfallCard, text: string) => boolean;
+  // Recognises a commander that needs this plan, when that is not the same as playing into it: a commander that makes
+  // Treasures needs the cards that reward them, not more of what it already does.
+  commander?: (card: ScryfallCard, text: string) => boolean;
   // Cards of the plan a commander deck should have before it is reliable.
   cards: number;
 }
 
 const EVASION = ['Flying', 'Trample', 'Menace', 'Shadow', 'Horsemanship'];
+
+const TREASURE_MAKER = /create[^.]*\btreasures?\b/i;
+const TREASURE_PAYOFF =
+  /treasures? you control|number of treasures|sacrifice (?:a|an|one or more) (?:treasures?|artifacts?)|whenever you sacrifice|whenever (?:a|an|one or more) (?:treasures?|artifacts?)[^.]*(?:put into a graveyard|sacrificed)/i;
 
 const isType = (card: ScryfallCard, type: string) => (card.type_line ?? '').includes(type);
 const hasKeyword = (card: ScryfallCard, keywords: readonly string[]) => (card.keywords ?? []).some((k) => keywords.includes(k));
@@ -132,6 +142,16 @@ const WINCONS: readonly Wincon[] = [
     cards: 3,
   },
   {
+    // A commander that triggers whenever you draw (Niv-Mizzet, Parun): cheap cantrips, card draw engines and wheels.
+    id: 'drawEngine',
+    query: '(otag:wheel or otag:draw-engine or otag:cantrip)',
+    card: (card, text) =>
+      ((isType(card, 'Instant') || isType(card, 'Sorcery')) && (card.cmc ?? 9) <= 2 && /draw a card/i.test(text)) ||
+      /draws? (?:two|three|four|seven|x|that many|an additional) cards?|each player draws/i.test(text),
+    commander: (_card, text) => /whenever you draw (?:a|your (?:first|second)) card/i.test(text),
+    cards: 8,
+  },
+  {
     id: 'discard',
     query: 'otag:discard (o:"opponent" or o:"each player")',
     card: (_card, text) => /(?:target|each) (?:opponent|player) discards/i.test(text),
@@ -178,6 +198,15 @@ const WINCONS: readonly Wincon[] = [
     query: 'o:"enters" o:"damage to each opponent"',
     card: (_card, text) => /whenever (?:a|another) (?:nontoken )?creature (?:you control )?enters[^.]*damage to each opponent/i.test(text),
     cards: 3,
+  },
+  {
+    // A commander that profits from being dealt damage (Smaug the Impenetrable): sweepers that damage each creature
+    // and pingers that can hit it again and again.
+    id: 'selfDamage',
+    query: '(o:"damage to each creature" or o:"damage to each other creature" or (otag:pinger o:"any target"))',
+    card: (_card, text) => /damage to each (?:other )?creature|(?:whenever|:)[^.]*deals? \d+ damage to any target/i.test(text),
+    commander: (_card, text) => /whenever [^.]*\bis dealt (?:noncombat )?damage/i.test(text),
+    cards: 6,
   },
   {
     id: 'damageDoubler',
@@ -258,9 +287,19 @@ const WINCONS: readonly Wincon[] = [
     cards: 4,
   },
   {
+    // Cards that keep making Treasures, for a commander that rewards them.
     id: 'treasure',
-    query: '(otag:repeatable-treasures or otag:synergy-treasure)',
-    card: (_card, text) => /\btreasures?\b/i.test(text),
+    query: 'otag:repeatable-treasures',
+    card: (_card, text) => TREASURE_MAKER.test(text),
+    commander: (_card, text) => TREASURE_PAYOFF.test(text),
+    cards: 5,
+  },
+  {
+    // Cards that reward Treasures (and sacrificing them), for a commander that makes them.
+    id: 'treasurePayoff',
+    query: 'otag:synergy-treasure',
+    card: (_card, text) => TREASURE_PAYOFF.test(text),
+    commander: (_card, text) => TREASURE_MAKER.test(text),
     cards: 5,
   },
   {
@@ -361,6 +400,7 @@ const SYNERGY_WINCONS: Partial<Record<SynergyId, WinconId>> = {
   enchantments: 'enchantress',
   landfall: 'landfall',
   planeswalkers: 'planeswalkers',
+  creatureSpells: 'blink',
 };
 
 export interface WinPlan {
@@ -379,17 +419,22 @@ export function cardWincons(card: ScryfallCard): WinconId[] {
   return WINCONS.filter((w) => w.card(card, text)).map((w) => w.id);
 }
 
+/** The plans a commander's own abilities need. */
+export function commanderWincons(commander: ScryfallCard): WinconId[] {
+  const text = cardText(commander);
+  return WINCONS.filter((w) => (w.commander ?? w.card)(commander, text)).map((w) => w.id);
+}
+
 /**
- * The plan that suits the deck: how the commander wins on its own first, then what its abilities build on, then what
- * the play style wins with; the next best as backup.
+ * The plan that suits the deck: what the commander's own abilities need first, then how it wins on its own (a big,
+ * sturdy threat by attacking), then what its abilities build on, then what the play style wins with; the next best as backup.
  */
 export function recommendPlan(style: PlayStyle, synergies: readonly SynergyId[], commander?: ScryfallCard): WinPlan {
-  // A commander that is itself a big, sturdy threat wins best by attacking: commander damage comes first.
-  const own = [...(synergies.includes('bigCommander') ? ['commanderDamage' as const] : []), ...(commander ? cardWincons(commander) : [])].filter(
-    (id) => id !== 'combat' || !synergies.includes('bigCommander'),
-  );
+  // Being a big creature is the weakest hint: a commander's own plans and what its abilities build on come first.
+  const own = commander ? commanderWincons(commander) : [];
+  const big = synergies.includes('bigCommander') ? (['commanderDamage'] as const) : own.includes('combat') ? (['combat'] as const) : [];
   const fromAbilities = synergies.flatMap((s) => SYNERGY_WINCONS[s] ?? []);
-  const [main, backup] = [...new Set([...own, ...fromAbilities, ...STYLE_WINCONS[style]])];
+  const [main, backup] = [...new Set([...own.filter((id) => id !== 'combat'), ...fromAbilities, ...big, ...STYLE_WINCONS[style]])];
   return { main, backup };
 }
 

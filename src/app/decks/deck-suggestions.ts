@@ -77,11 +77,27 @@ export interface RoleQuery {
   count: number;
 }
 
+// Mana every turn without strings attached: auras that make a land tap for more, and mana rocks like Sol Ring or
+// Mind Stone ("{T}: Add …" or a Signet's "{1}, {T}: Add …" as an ability of its own – not altars, treasure makers, equipment, suspend or artifact lands).
+export const MANA_ENCHANTMENT_QUERY = 't:enchantment o:"enchanted land is tapped for mana"';
+export const MANA_ROCK_QUERY = 't:artifact -t:creature -t:land -is:dfc -kw:suspend mv>=1 o:/^(\\{[0-9]\\}, )?\\{T\\}: Add/';
+const MANA_QUERY = `((${MANA_ENCHANTMENT_QUERY}) or (${MANA_ROCK_QUERY}))`;
+
+// Removal that answers anything right away: "Destroy/Exile target creature." without a condition (Swords to Plowshares,
+// Murder, Beast Within) first; then the targeted spells of the other colors – damage, fight and bite, turning a creature
+// into a token (Lightning Bolt, Ram Through, Pongify). Nothing that only blinks the own creatures.
+export const DIRECT_REMOVAL_QUERY =
+  '-t:land o:/(destroy|exile) target (creature|permanent|nonland permanent|artifact or creature|creature or planeswalker|creature or enchantment|artifact, creature, or enchantment|creature an opponent controls|creature or vehicle)\\./';
+export const TARGETED_REMOVAL_QUERY =
+  '(t:instant or t:sorcery) (o:/deals (\\d+|x) damage to (target creature|any target|target creature or planeswalker)/ or o:"fights target creature" or o:"fights up to one target creature" or o:/damage equal to its power to target creature/ or o:/(destroy|exile) target (creature|nonland permanent|permanent|artifact or creature)/ or o:/target creature (an opponent controls )?(loses all abilities and )?becomes a/)';
+const REMOVAL_QUERY = `((${DIRECT_REMOVAL_QUERY}) or (${TARGETED_REMOVAL_QUERY})) -otag:sweeper -o:/(exile|destroy) (another )?target (creature|permanent|nonland permanent|artifact or creature) you (control|own)/`;
+
+// The mana comes first: what it costs shapes the curve the creatures and spells are picked along.
 const COMMANDER_ROLES: readonly RoleQuery[] = [
+  { role: 'ramp', query: MANA_QUERY, count: 10 },
   { role: 'creatures', query: 't:creature', count: 0 },
-  { role: 'ramp', query: 'otag:ramp -t:land', count: 10 },
   { role: 'draw', query: 'otag:draw -t:land', count: 10 },
-  { role: 'removal', query: 'otag:removal -otag:sweeper -t:land', count: 8 },
+  { role: 'removal', query: REMOVAL_QUERY, count: 8 },
   { role: 'wipes', query: 'otag:sweeper -t:land', count: 3 },
   { role: 'tutors', query: 'otag:tutor-any -t:land', count: 0 },
   { role: 'theme', query: '', count: 0 },
@@ -91,7 +107,7 @@ const COMMANDER_ROLES: readonly RoleQuery[] = [
 // 60 card decks play most cards four times, so fewer different cards are needed.
 const CONSTRUCTED_ROLES: readonly RoleQuery[] = [
   { role: 'creatures', query: 't:creature', count: 0 },
-  { role: 'removal', query: 'otag:removal -t:land', count: 2 },
+  { role: 'removal', query: REMOVAL_QUERY, count: 2 },
   { role: 'draw', query: 'otag:draw -t:land', count: 2 },
   { role: 'theme', query: '', count: 0 },
   { role: 'lands', query: 't:land -t:basic', count: 4 },
@@ -287,16 +303,30 @@ export interface CreatureFactor {
 /** The creature types typal decks are commonly built around; offered as themes, and a commander of one leads such a deck. */
 export const POPULAR_TYPES = ['Elf', 'Goblin', 'Zombie', 'Dragon', 'Vampire', 'Angel', 'Merfolk', 'Wizard', 'Cat', 'Dinosaur', 'Bear', 'Frog', 'Squirrel', 'Rat', 'Sliver'] as const;
 
+// A sentence that strengthens or rewards the own creatures of a type: "Other Elves you control get +1/+1".
+const LORD_CLAUSE = /you control|\+\d+\/\+\d+/i;
+
+/** The sentence in which the text acts as a lord of one of the types (see LORD_CLAUSE), if any. */
+export function lordClause(text: string, types: readonly string[]): string | undefined {
+  const sentences = text.split(/(?<=\.)\s+|\n/);
+  for (const type of types) {
+    const found = sentences.find((sentence) => mentions(sentence, type) && LORD_CLAUSE.test(sentence));
+    if (found) {
+      return clause(found, typePattern(type));
+    }
+  }
+  return undefined;
+}
+
 /**
- * Whether the deck plays its creature types: a chosen theme, a commander that names its type or one of a common typal
- * type (a Dragon commander) make a typal deck; a commander that merely is a Kavu Pilot doesn't.
+ * Whether the deck plays its creature types: a chosen theme or a commander that is a lord of its type make a typal
+ * deck; a commander that merely is a Dragon or a Kavu Pilot doesn't – then only lords care about the type.
  */
 export function isTypal(options: SuggestionOptions): boolean {
   const commander = options.commander;
   const types = options.creatureTypes ?? [];
   const text = commander ? [commander.oracle_text, ...(commander.card_faces ?? []).map((f) => f.oracle_text)].join('\n') : '';
-  const popular = commander ? creatureSubtypes(commander).filter((type) => (POPULAR_TYPES as readonly string[]).includes(type)) : [];
-  return !!types.length && (!!options.themeTypes?.length || types.some((type) => clause(text, typePattern(type)) || popular.includes(type)));
+  return !!types.length && (!!options.themeTypes?.length || !!lordClause(text, types));
 }
 
 /** Whether a creature is of one of the given types (changelings are of every type). */
@@ -319,7 +349,7 @@ export function creatureRecommendation(options: SuggestionOptions): { count: num
   const scale = commanderDeck ? 1 : 0.6;
   const factors: CreatureFactor[] = [{ kind: 'style', delta: base }];
   const creatureMatch =
-    clause(text, CREATURE_SYNERGY) ?? (options.creatureTypes ?? []).map((type) => clause(text, typePattern(type))).find(Boolean);
+    clause(text, CREATURE_SYNERGY) ?? lordClause(text, options.creatureTypes ?? []);
   if (creatureMatch) {
     factors.push({ kind: 'creatureSynergy', delta: Math.round(5 * scale), match: creatureMatch });
   }
@@ -354,9 +384,23 @@ function bracketTutors(options: SuggestionOptions): number {
   return options.format === 'commander' && options.bracket ? (BRACKET_TUTORS[options.bracket] ?? 0) : 0;
 }
 
-// Mana that costs (almost) nothing: moxen, rituals and the cheapest mana rocks.
-const FAST_MANA_QUERY = '(otag:moxen or otag:ritual or (otag:mana-rock mv<=1))';
 const RARE_QUERY = '(r:rare or r:mythic)';
+
+// Cards nearly every commander deck plays in a role (when its colors allow): always among the suggestions.
+const ROLE_STAPLES: Partial<Record<SuggestionRole, { names: readonly string[]; minColors: number }>> = {
+  ramp: { names: ['Sol Ring', 'Arcane Signet'], minColors: 0 },
+  lands: { names: ['Command Tower'], minColors: 2 },
+};
+
+export function roleStaples(role: SuggestionRole, options: Pick<SuggestionOptions, 'format' | 'colors'>): readonly string[] {
+  const staples = ROLE_STAPLES[role];
+  return options.format === 'commander' && staples && options.colors.length >= staples.minColors ? staples.names : [];
+}
+
+/** Cheapest first; the (popularity) order stays among cards of the same mana value. */
+export function cheapestFirst(cards: readonly ScryfallCard[]): ScryfallCard[] {
+  return [...cards].sort((a, b) => (a.cmc ?? 0) - (b.cmc ?? 0));
+}
 
 /** Slots kept for the finishers of the deck's plan (different cards). */
 function planMinimum(options: SuggestionOptions): number {
@@ -498,15 +542,29 @@ export interface CommanderFit {
   preferredSets?: readonly string[];
   // Whether a commander plays into the chosen play style (see fitsStyle).
   style?: (card: ScryfallCard) => boolean;
+  // Whether newer commanders count more: for variety among the suggestions, not for how well a commander fits.
+  recency?: boolean;
+  // false when the user chose no theme: then only a lord of the types counts for them, not a commander that merely
+  // is of a type or names it.
+  typal?: boolean;
 }
 
 export function commanderFit(card: ScryfallCard, fit: CommanderFit, now = new Date()): number {
   const text = [card.oracle_text, ...(card.card_faces ?? []).map((f) => f.oracle_text)].join('\n');
   const types = fit.creatureTypes ?? [];
-  const typeFit = types.some((type) => mentions(text, type)) ? TYPE_TEXT_WEIGHT : types.some((type) => creatureSubtypes(card).includes(type)) ? TYPE_WEIGHT : 1;
+  const typeFit =
+    fit.typal === false
+      ? lordClause(text, types)
+        ? TYPE_TEXT_WEIGHT
+        : 1
+      : types.some((type) => mentions(text, type))
+        ? TYPE_TEXT_WEIGHT
+        : types.some((type) => creatureSubtypes(card).includes(type))
+          ? TYPE_WEIGHT
+          : 1;
   const setFit = fit.preferredSets?.includes(card.set) ? SET_WEIGHT : 1;
   const colorFit = fit.colors.length && (card.color_identity?.length ?? 0) === fit.colors.length ? EXACT_COLORS_WEIGHT : 1;
-  const recentFit = isRecent(card, now) ? RECENT_WEIGHT : 1;
+  const recentFit = fit.recency !== false && isRecent(card, now) ? RECENT_WEIGHT : 1;
   const styleFit = fit.style?.(card) ? STYLE_WEIGHT : 1;
   return typeFit * setFit * colorFit * recentFit * styleFit;
 }
@@ -530,7 +588,9 @@ export function pickCommanders(
 }
 
 /**
- * The commander to suggest: one that covers the colors and fits well. An own commander that fits best wins; otherwise
+ * The commander to suggest: one that covers the colors and fits well. Without a chosen theme an own commander that
+ * covers the colors always wins; with one, an own commander wins when it fits best. How new a commander is plays no
+ * part in that, so an older own one is not pushed aside by a newer one. Otherwise
  * it is drawn among the best fitting, most played ones (the best one most likely), so the same commander is not
  * suggested every time.
  */
@@ -540,20 +600,26 @@ export function bestCommander(
   fit: CommanderFit,
   random: () => number = Math.random,
 ): ScryfallCard | undefined {
-  const quality = { ...fit, preferredSets: undefined };
+  const quality = { ...fit, preferredSets: undefined, recency: false };
   const covers = (card: ScryfallCard) => fit.colors.every((c) => card.color_identity?.includes(c));
   const ownedNames = new Set(owned.map((c) => c.name));
   const ranked = [...owned, ...pool.filter((c) => !ownedNames.has(c.name))]
     .map((card, index) => ({ card, index, owned: ownedNames.has(card.name), covers: covers(card), score: commanderFit(card, quality) }))
-    .sort((a, b) => +b.covers - +a.covers || b.score - a.score || +b.owned - +a.owned || a.index - b.index);
+    .sort(
+      (a, b) =>
+        +b.covers - +a.covers || (fit.typal === false ? +b.owned - +a.owned : 0) || b.score - a.score || +b.owned - +a.owned || a.index - b.index,
+    );
   const best = ranked[0];
   if (!best || best.owned) {
     return best?.card;
   }
   const choices = ranked.filter((r) => r.covers === best.covers && r.score >= best.score * BEST_COMMANDER_SHARE).slice(0, BEST_COMMANDER_CHOICES);
-  // A weighted draw: the higher the weight, the closer the key gets to the random number itself.
+  // A weighted draw among them, where newer commanders are likelier: the higher the weight, the closer the key gets
+  // to the random number itself.
+  const appeal = choices.map((r) => commanderFit(r.card, { ...quality, recency: true }));
+  const top = Math.max(...appeal);
   return choices
-    .map((r, rank) => ({ card: r.card, key: random() ** (Math.sqrt(rank + 1) * (best.score / r.score)) }))
+    .map((r, rank) => ({ card: r.card, key: random() ** (Math.sqrt(rank + 1) * (top / appeal[rank])) }))
     .sort((a, b) => b.key - a.key)[0].card;
 }
 
@@ -756,6 +822,8 @@ export class DeckSuggestions {
   }
 
   // Candidates in order of preference; the first printing of a card wins, so cards from the own sets keep that set.
+  // Ramp: only the mana filter and the colors count – the cheapest mana enchantments, then the most played mana rocks.
+  // Removal: the unconditional answers first (see DIRECT_REMOVAL_QUERY).
   // Creatures: those of the play style, and in a typal deck the deck's types (and changelings) from the own sets, then
   // of newer and older sets; then the rest.
   private candidates(role: RoleQuery, options: SuggestionOptions): Observable<ScryfallCard[]> {
@@ -765,14 +833,25 @@ export class DeckSuggestions {
     const styleCreatures = creatures ? styleCreatureQuery(options.style) : undefined;
     const search = (query: string, inSets: boolean, sort: (cards: ScryfallCard[]) => ScryfallCard[] = (c) => c) =>
       this.scryfall.findPopularCards([roleQuery({ ...role, query }, options), inSets ? setQuery(sets) : ''].filter(Boolean).join(' ')).pipe(map((cards) => sort(cards)));
-    const searches: Observable<ScryfallCard[]>[] = [];
-    // The higher the bracket, the more the strongest cards come first: Game Changers, fast mana, rares and mythics.
+    // The staples are searched by name, so a long list of other cards cannot push them out of the candidates.
+    const staples = roleStaples(role.role, options);
+    const stapleSearch = staples.length ? [search(`(${staples.map((name) => `!"${name}"`).join(' or ')})`, false)] : [];
+    if (role.role === 'ramp') {
+      return from([...stapleSearch, search(MANA_ENCHANTMENT_QUERY, false, cheapestFirst), search(MANA_ROCK_QUERY, false)]).pipe(
+        concatMap((s) => s),
+        toArray(),
+        map((lists) => lists.flat()),
+      );
+    }
+    const searches: Observable<ScryfallCard[]>[] = [...stapleSearch];
+    // The higher the bracket, the more the strongest cards come first: Game Changers, rares and mythics.
     const power = options.format === 'commander' ? (options.bracket ?? 0) : 0;
     if (power >= 3) {
       searches.push(search(`${role.query} is:gamechanger`, false));
     }
-    if (power >= 5 && role.role === 'ramp') {
-      searches.push(search(FAST_MANA_QUERY, false));
+    if (role.role === 'removal') {
+      // On its own: combined with the whole removal search it would use more regular expressions than Scryfall allows.
+      searches.push(search(`${DIRECT_REMOVAL_QUERY} -otag:sweeper`, false));
     }
     if (styleCreatures) {
       searches.push(search(styleCreatures, false));
