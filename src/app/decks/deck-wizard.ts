@@ -35,6 +35,8 @@ import {
   pickCommanders,
   preferredSets,
   splitBasics,
+  POPULAR_TYPES,
+  hasCreatureType,
 } from './deck-suggestions';
 import { categoryRole } from './auto-categories';
 import { CardRating, cardEffects, cardScore, fitsStyle, recommendStyle, cardSynergies, commanderSynergies, roleSynergies } from './deck-synergies';
@@ -54,7 +56,7 @@ const CONSTRUCTED_STEPS: readonly Step[] = ['format', 'cards', 'style', 'level',
 // Play styles that usually need Game Changers or tutors, which the lower brackets leave out.
 const STYLE_MIN_BRACKET: Partial<Record<PlayStyle, Bracket>> = { combo: 3, bigMana: 3 };
 
-const POPULAR_THEMES = ['Elf', 'Goblin', 'Zombie', 'Dragon', 'Vampire', 'Angel', 'Merfolk', 'Wizard', 'Cat', 'Dinosaur', 'Bear', 'Frog', 'Squirrel', 'Rat', 'Sliver'] as const;
+const POPULAR_THEMES = POPULAR_TYPES;
 const MAX_THEME_MATCHES = 8;
 const MIN_DECK_TYPES = 3;
 // Card types that also work as a deck theme (artifact creatures, cards that care about artifacts); not in Scryfall's creature type catalog.
@@ -475,8 +477,17 @@ export class DeckWizard {
         cardScore(card, ratings.get(card.name) ?? empty, group.role, this.style(), index, open.length, this.power()) +
         this.planScore(card),
     }));
-    // The picks fill the gaps of the mana curve one by one.
-    const picks = pickAlongCurve(scored, needed, this.curve(), this.curveTarget(), this.nonLandTarget(), this.copiesFor(group)).map((p) => p.card);
+    // The picks fill the gaps of the mana curve one by one. A chosen theme is a must: the creatures are of its types,
+    // others only when there are not enough of them.
+    const along = (candidates: typeof scored, count: number) =>
+      pickAlongCurve(candidates, count, this.curve(), this.curveTarget(), this.nonLandTarget(), this.copiesFor(group)).map((p) => p.card);
+    const themes = group.role === 'creatures' ? this.themes() : [];
+    const themed = scored.filter((s) => hasCreatureType(s.card, themes));
+    const picks = !themes.length
+      ? along(scored, needed)
+      : themed.length >= needed
+        ? along(themed, needed)
+        : [...themed.map((s) => s.card), ...along(scored.filter((s) => !themed.includes(s)), needed - themed.length)];
     // The finishers keep one slot for the backup plan.
     const backup = this.plan()?.backup;
     if (group.role === 'theme' && backup && picks.length >= 2 && !picks.some((card) => this.cardPlans(card).includes(backup))) {
@@ -1300,6 +1311,8 @@ export class DeckWizard {
 
     const name = commander ? cardDisplayName(commander) : this.i18n.translate('decks.defaultName');
     const deck = this.deckService.create(name, serializeDecklist(entries), this.format());
+    this.deckService.setThemes(deck.id, this.themes());
+    this.deckService.setStyle(deck.id, this.style());
     if (commanderDeck) {
       this.deckService.setBracket(deck.id, this.bracket());
     } else {
@@ -1338,6 +1351,8 @@ export class DeckWizard {
     }
     this.deckService.updateText(deck.id, serializeDecklist(entries));
     this.deckService.setFormat(deck.id, this.format());
+    this.deckService.setThemes(deck.id, this.themes());
+    this.deckService.setStyle(deck.id, this.style());
     if (commanderDeck) {
       this.deckService.setBracket(deck.id, this.bracket());
     } else {

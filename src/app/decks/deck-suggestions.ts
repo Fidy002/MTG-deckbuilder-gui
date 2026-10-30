@@ -114,7 +114,7 @@ const STYLE_ROLE_COUNTS: Record<PlayStyle, Partial<Record<SuggestionRole, { comm
 
 // Cards that carry a play style, filling the non-land slots the creatures and the other roles leave free.
 const THEME_QUERIES: Partial<Record<PlayStyle, string>> = {
-  goWide: '(o:"create" o:"token" or o:"creatures you control get") -t:creature -t:land',
+  goWide: '(o:"create" o:"creature token" or o:"creatures you control get") -t:creature -t:land',
   voltron: '(t:equipment or (t:aura o:"enchanted creature")) -t:land',
   spellslinger: '(t:instant or t:sorcery) -otag:sweeper',
   bigMana: 'mv>=7 -t:land -t:creature',
@@ -284,11 +284,24 @@ export interface CreatureFactor {
   match?: string;
 }
 
-/** Whether the deck plays its creature types: a commander that merely is a Dog makes no typal deck; a chosen theme or a commander that names its type does. */
+/** The creature types typal decks are commonly built around; offered as themes, and a commander of one leads such a deck. */
+export const POPULAR_TYPES = ['Elf', 'Goblin', 'Zombie', 'Dragon', 'Vampire', 'Angel', 'Merfolk', 'Wizard', 'Cat', 'Dinosaur', 'Bear', 'Frog', 'Squirrel', 'Rat', 'Sliver'] as const;
+
+/**
+ * Whether the deck plays its creature types: a chosen theme, a commander that names its type or one of a common typal
+ * type (a Dragon commander) make a typal deck; a commander that merely is a Kavu Pilot doesn't.
+ */
 export function isTypal(options: SuggestionOptions): boolean {
   const commander = options.commander;
+  const types = options.creatureTypes ?? [];
   const text = commander ? [commander.oracle_text, ...(commander.card_faces ?? []).map((f) => f.oracle_text)].join('\n') : '';
-  return !!options.creatureTypes?.length && (!!options.themeTypes?.length || options.creatureTypes.some((type) => clause(text, typePattern(type))));
+  const popular = commander ? creatureSubtypes(commander).filter((type) => (POPULAR_TYPES as readonly string[]).includes(type)) : [];
+  return !!types.length && (!!options.themeTypes?.length || types.some((type) => clause(text, typePattern(type)) || popular.includes(type)));
+}
+
+/** Whether a creature is of one of the given types (changelings are of every type). */
+export function hasCreatureType(card: ScryfallCard, types: readonly string[]): boolean {
+  return !!card.keywords?.includes('Changeling') || creatureSubtypes(card).some((type) => types.includes(type));
 }
 
 /** The creatures that carry the play style (e.g. landfall creatures), for the styles whose theme cards leave creatures out. */
@@ -700,8 +713,10 @@ export class DeckSuggestions {
   }
 
   // The candidates of one role from a single search (the theme's queries taken together), most played first.
+  // A typal deck's creatures are searched by its types (and changelings).
   roleCards(role: RoleQuery, options: SuggestionOptions, ownedGameChangers = 0): Observable<SuggestionGroup> {
-    const parts = role.role === 'theme' ? themeQueries(options) : [role.query];
+    const typal = role.role === 'creatures' && isTypal(options);
+    const parts = role.role === 'theme' ? themeQueries(options) : [typal ? tribalQuery(options.creatureTypes ?? []) : role.query];
     const query = roleQuery({ ...role, query: parts.length > 1 ? `(${parts.map((part) => `(${part})`).join(' or ')})` : (parts[0] ?? '') }, options);
     return this.scryfall.findPopularCards(query).pipe(
       map((cards) => {

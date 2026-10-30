@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, inject, input, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { CardSearch } from '../cards/card-search';
 import { I18nService, TranslationKey, TranslationParams } from '../i18n/i18n.service';
@@ -16,6 +16,7 @@ import { DeckCardsService, cardKey } from './deck-cards.service';
 import { Deck, DeckService, countCards, countSideboard } from './deck.service';
 import { Badge, suggestionBadges } from '../shared/card-badges/card-badges';
 import { categoryRole } from './auto-categories';
+import { MarqueeArt } from '../shared/card-marquee/card-marquee';
 import { DeckAdvice, DeckAdvisor, RankedSuggestion, mixSuggestions, rolesByNeed, suggestionShares } from './deck-advisor';
 import { SuggestionRole } from './deck-suggestions';
 import { DeckFormat, countEntries, detectFormat, parseDecklist, serializeDecklist, DeckEntry } from './decklist';
@@ -134,6 +135,19 @@ export class MyDecks {
     const cards = this.mainCards();
     return cards?.length ? manaCurve(cards) : undefined;
   });
+
+  // The marquee shows the art of the open deck's cards, taken once per deck: editing the deck doesn't swap the pictures.
+  private readonly marqueeArt = inject(MarqueeArt);
+  private marqueeDeck?: string;
+  private readonly showDeckArt = effect(() => {
+    const id = this.deck()?.id;
+    const cards = this.mainCards();
+    if (id && cards?.length && id !== this.marqueeDeck) {
+      this.marqueeDeck = id;
+      untracked(() => this.marqueeArt.cards.set(cards.map((c) => c.card)));
+    }
+  });
+  private readonly restoreMarquee = inject(DestroyRef).onDestroy(() => this.marqueeArt.cards.set(undefined));
   // Decks saved before formats existed fall back to the detection used on import.
   protected readonly deckFormat = computed(() => this.deck()?.format ?? detectFormat(this.entries()));
   protected readonly legalityFormat = computed(() =>

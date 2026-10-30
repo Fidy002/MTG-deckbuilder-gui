@@ -16,7 +16,9 @@ import {
   SuggestionOptions,
   SuggestionRole,
   deckCreatureTypes,
+  hasCreatureType,
   interleave,
+  isTypal,
   preferredSets,
 } from './deck-suggestions';
 import { CardRating, SynergyId, cardEffects, cardScore, cardSynergies, commanderStyle, commanderSynergies, fitsStyle, roleSynergies } from './deck-synergies';
@@ -143,9 +145,11 @@ export class DeckAdvisor {
     const identity = new Set(commander?.color_identity ?? cards.flatMap((c) => c.color_identity ?? []));
     const colors = COLOR_ORDER.filter((c) => identity.has(c));
     const catalog = await firstValueFrom(this.scryfall.creatureTypes$).catch(() => [] as string[]);
-    const types = deckCreatureTypes(commander, cards, catalog);
-    // The commander's play style decides what fits.
-    const style = (commanderStyle(commander, cards) ?? 'midrange') as PlayStyle;
+    // The theme chosen in the wizard is a must: its types alone, not others read off the deck's cards.
+    const themes = deck.themes ?? [];
+    const types = themes.length ? themes : deckCreatureTypes(commander, cards, catalog);
+    // The play style chosen in the wizard decides what fits; without one, the commander's.
+    const style = deck.style ?? ((commanderStyle(commander, cards) ?? 'midrange') as PlayStyle);
     const bracket = commanderDeck ? (deck.bracket ?? 2) : undefined;
     const synergies = commanderSynergies(commander, types);
     const plan = recommendPlan(style, synergies, commander);
@@ -161,6 +165,7 @@ export class DeckAdvisor {
       ownedCreatures: countOf('Creature'),
       ownedLands: countOf('Land'),
       creatureTypes: types,
+      themeTypes: themes,
       preferredSets: preferredSets(owned.map((o) => ({ set: o.entry.set ?? o.card.set, basic: !!o.card.type_line?.startsWith('Basic') }))),
       planQueries: [
         ...winconQueries([plan.main, ...(plan.backup ? [plan.backup] : [])]),
@@ -196,9 +201,8 @@ export class DeckAdvisor {
     // Unlike in the wizard, a synergy with the commander counts in every role: the deck mostly misses other roles than
     // the ones its synergies are made for (a lifegain card is one whether it is filed under the theme or removal).
     const roleIds = role === 'lands' ? roleSynergies(advice.synergies, role) : advice.synergies;
-    const types = role === 'creatures' && advice.synergies.includes('tribal') ? (options.creatureTypes ?? []) : [];
-    const typal = (card: ScryfallCard) =>
-      types.some((type) => card.type_line?.includes(type)) || !!card.keywords?.includes('Changeling') ? TYPAL_SCORE : 0;
+    const types = role === 'creatures' && (advice.synergies.includes('tribal') || isTypal(options)) ? (options.creatureTypes ?? []) : [];
+    const typal = (card: ScryfallCard) => (types.length && hasCreatureType(card, types) ? TYPAL_SCORE : 0);
     const ranked = group.cards
       .map((card, index) => {
         const rating = { synergies: cardSynergies(card, roleIds, options.creatureTypes ?? []), effects: cardEffects(card, role, options.colors) };

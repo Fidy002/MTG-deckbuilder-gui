@@ -1,7 +1,9 @@
+<!-- The drifting card art behind the top of every page. -->
+<app-card-marquee />
+
 <header>
   <div class="brand">
     <h1>{{ 'app.title' | t }}</h1>
-    <small>{{ 'app.subtitle' | t }}</small>
   </div>
   <nav class="tab-bar">
     <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">{{ 'nav.search' | t }}</a>
@@ -13,5 +15,9 @@
 <main>
   <router-outlet />
 </main>
+
+<footer>
+  <small>{{ 'app.attribution' | t }}</small>
+</footer>
 
 <app-card-hover-overlay />

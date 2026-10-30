@@ -55,6 +55,7 @@ describe('play style fit', () => {
   it('recognises cards that carry a style', () => {
     expect(fitsStyle(card('Equipped creature gets +2/+2.\nEquip {2}', { type_line: 'Artifact — Equipment' }), 'voltron')).toBe(true);
     expect(fitsStyle(card('Create two 1/1 white Soldier creature tokens.'), 'goWide')).toBe(true);
+    expect(fitsStyle(card('At the beginning of your upkeep, create a Treasure token.'), 'goWide')).toBe(false);
     expect(fitsStyle(card('Draw two cards.', { type_line: 'Instant' }), 'spellslinger')).toBe(true);
     expect(fitsStyle(card('Draw two cards.', { type_line: 'Instant' }), 'voltron')).toBe(false);
     expect(fitsStyle(card('Landfall — Whenever a land you control enters, create a 0/1 Plant creature token.'), 'landfall')).toBe(true);
@@ -105,6 +106,9 @@ describe('play style fit', () => {
     expect(recommendStyle([smaug, sword, card('Draw a card.', { type_line: 'Sorcery', cmc: 2 })])?.style).toBe('voltron');
     const goblin = card('Haste', { type_line: 'Creature — Goblin', cmc: 1, keywords: ['Haste'] });
     expect(recommendStyle([goblin, goblin, desire])?.style).toBe('aggro');
+    // Its Treasures are no token army: as a commander, Smaug carries a voltron deck.
+    const tokens = card('Create two 1/1 white Soldier creature tokens.', { type_line: 'Sorcery', cmc: 3 });
+    expect(commanderStyle(smaug, [smaug, tokens, desire])).toBe('voltron');
   });
 });
 

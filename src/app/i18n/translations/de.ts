@@ -2,8 +2,8 @@ import { Translations } from './en';
 
 export const de: Translations = {
   app: {
-    title: 'MTG Deckbuilder',
-    subtitle: 'Kartendaten und Bilder von Scryfall',
+    title: 'Küchentischmagie',
+    attribution: 'Kartendaten und Bilder von Scryfall. Magic: The Gathering ist eine Marke von Wizards of the Coast.',
   },
   nav: {
     search: 'Kartensuche',

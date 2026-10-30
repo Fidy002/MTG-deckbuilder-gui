@@ -39,6 +39,11 @@ function isType(card: ScryfallCard, type: string): boolean {
   return (card.type_line ?? '').includes(type);
 }
 
+// The type of the front face: a creature with an adventure (Creature // Sorcery) is a creature to play.
+function isFrontType(card: ScryfallCard, type: string): boolean {
+  return (card.card_faces?.[0]?.type_line ?? card.type_line ?? '').includes(type);
+}
+
 // A commander that is a threat on its own: big, evasive and hard to remove – worth making even bigger.
 const STURDY = ['Indestructible', 'Hexproof', 'Ward', 'Shroud', 'Protection'];
 const BIG_COMMANDER_POWER = 5;
@@ -244,11 +249,12 @@ export interface CardRating {
 const STYLE_FITS: Record<string, (card: ScryfallCard, text: string) => boolean> = {
   aggro: (card) => hasKeyword(card, ['Haste', 'Menace', 'Trample', 'First strike']),
   control: (_card, text) => /counter target spell|\bflash\b|return target [^.]* to (?:its|their) owner's hand/i.test(text),
-  goWide: (_card, text) => /create[^.]*\btokens?\b|creatures you control get/i.test(text),
+  // Creature tokens only: Treasures, Food or Clues are no army.
+  goWide: (_card, text) => /create[^.]*\bcreature tokens?\b|creatures you control get/i.test(text),
   voltron: (card, text) =>
     hasKeyword(card, ['Flying', 'Trample', 'Double strike', 'Hexproof', 'Indestructible', 'Equip']) ||
     /equipped creature|enchanted creature|gains? (?:hexproof|indestructible|protection)/i.test(text),
-  spellslinger: (card, text) => isType(card, 'Instant') || isType(card, 'Sorcery') || /instant or sorcery|noncreature spell/i.test(text),
+  spellslinger: (card, text) => isFrontType(card, 'Instant') || isFrontType(card, 'Sorcery') || /instant or sorcery|noncreature spell/i.test(text),
   bigMana: (card, text) =>
     (card.cmc ?? 0) >= 6 || /\{T\}: Add \{\w\}\{\w\}|add \{\w\} for each|search your library for [^.]*lands?|double the amount of mana/i.test(text),
   combo: (_card, text) => /search your library for a card|untap (?:target|all|each)|copy target|whenever [^.]* untaps/i.test(text),
@@ -263,18 +269,22 @@ const STYLE_FITS: Record<string, (card: ScryfallCard, text: string) => boolean> 
 // and protected, like Smaug the Impenetrable): evasion alone (any flier) says nothing about the deck.
 // Aggro only counts cheap cards – a 7 mana dragon with haste is no aggro card.
 const AGGRO_ADVICE_MAX_MV = 3;
+// A legend built to carry the deck alone: big, evasive and protected.
+function carriesTheDeck(card: ScryfallCard): boolean {
+  return isVoltronLegend(card) && Number(card.power) >= BIG_COMMANDER_POWER && hasKeyword(card, STURDY);
+}
+
+// A legend that can win on its own once it is pumped and protected: evasive and already hitting hard.
+const VOLTRON_LEGEND_POWER = 4;
+function isVoltronLegend(card: ScryfallCard): boolean {
+  return isType(card, 'Legendary') && isFrontType(card, 'Creature') && Number(card.power) >= VOLTRON_LEGEND_POWER && hasKeyword(card, EVASION);
+}
+
 const STYLE_ADVICE_FITS: Record<string, (card: ScryfallCard, text: string) => boolean> = {
   ...STYLE_FITS,
   aggro: (card, text) => (card.cmc ?? 0) <= AGGRO_ADVICE_MAX_MV && STYLE_FITS['aggro'](card, text),
   voltron: (card, text) =>
-    isType(card, 'Equipment') ||
-    isType(card, 'Aura') ||
-    /equipped creature|enchanted creature|equip/i.test(text) ||
-    (isType(card, 'Legendary') &&
-      isType(card, 'Creature') &&
-      Number(card.power) >= BIG_COMMANDER_POWER &&
-      hasKeyword(card, EVASION) &&
-      hasKeyword(card, STURDY)),
+    isType(card, 'Equipment') || isType(card, 'Aura') || /equipped creature|enchanted creature|\bequip\b/i.test(text) || isVoltronLegend(card),
 };
 
 const STYLE_ADVICE_SHARE = 0.25;
@@ -315,10 +325,14 @@ export function recommendStyle(cards: readonly ScryfallCard[]): StyleAdvice | un
 }
 
 /**
- * The play style of a deck that has a commander: one the commander itself plays into, the one most of the other cards
+ * The play style of a deck that has a commander: voltron for a legend built to carry the deck alone (its high mana value
+ * or Treasures make no other style); otherwise one the commander itself plays into, the one most of the other cards
  * share if it fits several; otherwise what the cards point to.
  */
 export function commanderStyle(commander: ScryfallCard | undefined, cards: readonly ScryfallCard[]): string | undefined {
+  if (commander && carriesTheDeck(commander)) {
+    return 'voltron';
+  }
   const spells = cards.filter((card) => card !== commander && !isType(card, 'Land'));
   const own = commander ? Object.entries(STYLE_ADVICE_FITS).filter(([, fits]) => fits(commander, cardText(commander))) : [];
   if (!own.length) {

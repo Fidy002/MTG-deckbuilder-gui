@@ -1,5 +1,6 @@
 import { Injectable, effect, signal } from '@angular/core';
 import { Bracket } from './deck-brackets';
+import type { PlayStyle } from './deck-suggestions';
 import { DeckEntry, DeckFormat, countEntries, isSameCard, parseDecklist, serializeDecklist } from './decklist';
 
 const STORAGE_KEY = 'mtg-deckbuilder.decks';
@@ -17,6 +18,9 @@ export interface Deck {
   coverCard?: string;
   bracket?: Bracket;
   colors?: string[];
+  // The creature types chosen as the deck's theme in the wizard, and its play style there.
+  themes?: string[];
+  style?: PlayStyle;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,6 +98,14 @@ export class DeckService {
     this.patch(id, { bracket });
   }
 
+  setThemes(id: string, themes: string[]): void {
+    this.patch(id, { themes: themes.length ? themes : undefined });
+  }
+
+  setStyle(id: string, style: PlayStyle): void {
+    this.patch(id, { style });
+  }
+
   setLanguage(id: string, language: string | undefined): void {
     this.patch(id, { language });
   }
@@ -161,7 +173,7 @@ export class DeckService {
     this.updateText(id, serializeDecklist(entries));
   }
 
-  private patch(id: string, changes: Partial<Pick<Deck, 'name' | 'text' | 'language' | 'format' | 'legalityFormat' | 'legalityCheck' | 'coverCard' | 'bracket'>>): void {
+  private patch(id: string, changes: Partial<Pick<Deck, 'name' | 'text' | 'language' | 'format' | 'legalityFormat' | 'legalityCheck' | 'coverCard' | 'bracket' | 'themes' | 'style'>>): void {
     const updatedAt = new Date().toISOString();
     this.state.update((decks) =>
       decks

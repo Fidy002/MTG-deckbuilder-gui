@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { ScryfallCard } from '../scryfall/scryfall.models';
 import { ScryfallService } from '../scryfall/scryfall.service';
-import { DeckSuggestions, basicLands, bestCommander, interleave, manaPips, recommendColors, splitBasics, commanderQuery, deckCreatureTypes, commanderFit, newerFirst, pickCommanders, pickSuggestions, preferredSets, creatureRecommendation, isTypal, recommendedCreatures, styleCreatureQuery, roleCounts, roleQuery, setQuery, tribalQuery, typeQuery } from './deck-suggestions';
+import { DeckSuggestions, basicLands, bestCommander, interleave, manaPips, recommendColors, splitBasics, commanderQuery, deckCreatureTypes, commanderFit, newerFirst, pickCommanders, pickSuggestions, preferredSets, creatureRecommendation, hasCreatureType, isTypal, recommendedCreatures, styleCreatureQuery, roleCounts, roleQuery, setQuery, tribalQuery, typeQuery } from './deck-suggestions';
 
 const card = (name: string, oracle_text = '', game_changer = false) => ({ name, oracle_text, game_changer }) as unknown as ScryfallCard;
 
@@ -255,6 +255,11 @@ describe('win plan', () => {
     expect(isTypal(base)).toBe(false);
     expect(isTypal({ ...base, themeTypes: ['Kavu'] })).toBe(true);
     expect(isTypal({ ...base, commander: { ...kavu, oracle_text: 'Other Kavu you control get +1/+1.' } })).toBe(true);
+    const smaug = { name: 'Smaug the Magnificent', type_line: 'Legendary Creature — Dragon', oracle_text: 'Flying, haste' } as ScryfallCard;
+    expect(isTypal({ ...base, commander: smaug, creatureTypes: ['Dragon'] })).toBe(true);
+    expect(hasCreatureType({ name: 'Goldspan Dragon', type_line: 'Creature — Dragon' } as ScryfallCard, ['Dragon'])).toBe(true);
+    expect(hasCreatureType({ name: 'Changeling Outcast', type_line: 'Creature — Shapeshifter', keywords: ['Changeling'] } as ScryfallCard, ['Dragon'])).toBe(true);
+    expect(hasCreatureType({ name: 'Ragavan', type_line: 'Legendary Creature — Monkey Pirate' } as ScryfallCard, ['Dragon'])).toBe(false);
     expect(styleCreatureQuery('landfall')).toMatch(/^t:creature .*otag:landfall/);
     expect(styleCreatureQuery('landfall')).not.toContain('-t:creature');
     expect(styleCreatureQuery('spellslinger')).toBeUndefined();

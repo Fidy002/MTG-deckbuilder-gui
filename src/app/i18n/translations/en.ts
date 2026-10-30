@@ -1,8 +1,8 @@
 // Source of truth for all translation keys: every other language must have the same structure.
 export const en = {
   app: {
-    title: 'MTG Deckbuilder',
-    subtitle: 'Card data and images provided by Scryfall',
+    title: 'Küchentischmagie',
+    attribution: 'Card data and images provided by Scryfall. Magic: The Gathering is a trademark of Wizards of the Coast.',
   },
   nav: {
     search: 'Card search',

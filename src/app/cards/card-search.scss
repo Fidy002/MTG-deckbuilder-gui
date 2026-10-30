@@ -4,6 +4,11 @@
   gap: var(--space-5);
 }
 
+// On its own page the search sits below the drifting card art, not on top of it.
+:host(:not(.compact)) {
+  padding-top: 96px;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;

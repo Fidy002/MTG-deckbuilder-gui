@@ -24,15 +24,9 @@ header {
     font-size: var(--text-xl);
     font-weight: 600;
     line-height: 1.1;
+    font-variant-caps: small-caps;
+    letter-spacing: 0.04em;
     color: var(--color-text);
-  }
-
-  small {
-    margin-top: var(--space-1);
-    font-size: var(--text-2xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--color-text-faint);
   }
 }
 
@@ -49,4 +43,13 @@ main {
   max-width: var(--page-max-width);
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-7);
+}
+
+footer {
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-top: var(--line-width) solid var(--color-line);
+  font-size: var(--text-2xs);
+  color: var(--color-text-faint);
 }

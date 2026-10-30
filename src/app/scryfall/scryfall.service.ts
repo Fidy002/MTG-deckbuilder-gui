@@ -68,9 +68,12 @@ export class ScryfallService {
     this.http.get<{ data: string[] }>(`${API_URL}/catalog/creature-types`).pipe(map((catalog) => catalog.data)),
   ).pipe(shareReplay({ bufferSize: 1, refCount: false }));
 
-  /** First page of a search, most played cards first (EDHREC rank). */
-  findPopularCards(query: string): Observable<ScryfallCard[]> {
-    const params = new HttpParams().set('q', query).set('unique', 'cards').set('order', 'edhrec');
+  /** One page (the first by default) of a search, most played cards first (EDHREC rank). */
+  findPopularCards(query: string, page = 1): Observable<ScryfallCard[]> {
+    let params = new HttpParams().set('q', query).set('unique', 'cards').set('order', 'edhrec');
+    if (page > 1) {
+      params = params.set('page', page);
+    }
     return this.http.get<ScryfallList<ScryfallCard>>(`${API_URL}/cards/search`, { params }).pipe(
       map((list) => list.data),
       catchError(notFoundAs<ScryfallCard[]>([])),
