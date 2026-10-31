@@ -27,6 +27,9 @@ import { catchError, debounceTime, distinctUntilChanged, map, of, switchMap, tap
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { manaCurve } from './deck-curve';
 import { ManaCurve } from './mana-curve';
+import { cardmarketWantsUrl, wantsListText } from './cardmarket-wants';
+import { formatEuro } from '../cards/card-preview';
+import { CardPricesService, entryPrice, printKey } from '../scryfall/card-prices.service';
 
 type View = 'overview' | 'text';
 
@@ -42,6 +45,7 @@ const COUNT_FLASH: Keyframe[] = [
 ];
 
 const SUGGESTIONS_PER_CLICK = 20;
+const CARDMARKET_TOAST_MS = 10_000;
 
 @Component({
   selector: 'app-my-decks',
@@ -56,6 +60,7 @@ const SUGGESTIONS_PER_CLICK = 20;
 export class MyDecks {
   private readonly deckService = inject(DeckService);
   private readonly deckCards = inject(DeckCardsService);
+  private readonly priceService = inject(CardPricesService);
   private readonly advisor = inject(DeckAdvisor);
   private readonly i18n = inject(I18nService);
   private readonly settings = inject(SettingsService);
@@ -130,6 +135,55 @@ export class MyDecks {
       ),
     ),
   );
+
+  // Everything that gets bought: the maybeboard is left out.
+  private readonly pricedCards = toSignal(
+    toObservable(computed(() => ({ entries: this.entries().filter((e) => e.section !== 'maybeboard'), language: this.deckLanguage() }))).pipe(
+      debounceTime(300),
+      switchMap(({ entries, language }) =>
+        entries.length
+          ? this.deckCards.resolve(entries, language).pipe(
+              switchMap((resolved) => {
+                const cards = entries.map((entry) => ({ entry, card: resolved.get(cardKey(entry))?.card }));
+                return this.priceService.prices(cards.flatMap((c) => (c.card ? [c.card] : []))).pipe(
+                  map((prices) => cards.map((c) => ({ ...c, price: c.card && entryPrice(prices.get(printKey(c.card)), c.entry.foil) }))),
+                );
+              }),
+              catchError(() => of(undefined)),
+            )
+          : of([]),
+      ),
+    ),
+  );
+
+  protected readonly deckPrice = computed(() => {
+    const cards = this.pricedCards();
+    if (!cards?.length) {
+      return undefined;
+    }
+    const total = cards.reduce((sum, c) => sum + (c.price ?? 0) * c.entry.count, 0);
+    const missing = cards.filter((c) => c.price === undefined).reduce((sum, c) => sum + c.entry.count, 0);
+    const price = formatEuro(total, this.i18n.language());
+    const title = [
+      this.i18n.translate('decks.totalPrice', { price }),
+      missing ? this.i18n.translate('decks.missingPrices', { count: missing }) : '',
+    ].filter(Boolean).join('\n');
+    return { total: price, missing, title };
+  });
+
+  // Cardmarket can't be filled from outside: the list goes to the clipboard (first, while this tab still has focus)
+  // for pasting into a wants list's decklist field.
+  protected async openCardmarketWants(): Promise<void> {
+    const cards = this.pricedCards() ?? this.entries().filter((e) => e.section !== 'maybeboard').map((entry) => ({ entry, card: undefined }));
+    const text = wantsListText(cards.map(({ entry, card }) => ({ name: card?.name ?? entry.name, count: entry.count })));
+    try {
+      await navigator.clipboard.writeText(text);
+      this.showToast({ key: 'decks.cardmarketWantsCopied' }, CARDMARKET_TOAST_MS);
+    } catch {
+      this.showToast({ key: 'export.failed', error: true });
+    }
+    window.open(cardmarketWantsUrl(this.i18n.language()), '_blank', 'noopener');
+  }
 
   protected readonly deckCurve = computed(() => {
     const cards = this.mainCards();
@@ -437,10 +491,10 @@ export class MyDecks {
     return `bracket.name${bracket}`;
   }
 
-  private showToast(toast: Toast): void {
+  private showToast(toast: Toast, duration = 3000): void {
     clearTimeout(this.toastTimer);
     this.toast.set(toast);
-    this.toastTimer = setTimeout(() => this.toast.set(undefined), 3000);
+    this.toastTimer = setTimeout(() => this.toast.set(undefined), duration);
   }
 }
 

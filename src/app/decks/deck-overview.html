@@ -121,6 +121,9 @@
                   <span class="lang-tag" [title]="'overview.notLocalized' | t: { language: languageName() }">EN</span>
                 }
               </span>
+              @if (priceLabel(card); as price) {
+                <span class="price-tag" [title]="'card.price' | t">{{ price }}</span>
+              }
               @if (hasCardIssue(card.key)) {
                 <ng-container *ngTemplateOutlet="warningTriangle; context: { $implicit: 'legal-tag' }" />
               }

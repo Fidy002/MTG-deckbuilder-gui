@@ -200,7 +200,17 @@ h3 {
   gap: var(--space-1);
 }
 
+// Opposite the count badge.
+.price-tag {
+  position: absolute;
+  top: 11.5%;
+  right: 7%;
+  border: var(--line-width) solid var(--color-line-strong);
+  color: var(--color-text);
+}
+
 .counter,
+.price-tag,
 .lang-tag {
   padding: 0 var(--space-1);
   border-radius: var(--radius-sm);

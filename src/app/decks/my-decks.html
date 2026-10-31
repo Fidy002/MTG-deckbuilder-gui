@@ -93,7 +93,29 @@
           {{ deck.sideboardCount }}
         </span>
       }
+      @if (deckPrice(); as price) {
+        <span
+          class="deck-price"
+          [title]="price.title"
+          [attr.aria-label]="price.title"
+        >
+          {{ price.total }}
+          @if (price.missing) {
+            <span class="missing" aria-hidden="true">*</span>
+          }
+        </span>
+      }
       <div class="title-actions">
+        <button
+          type="button"
+          class="icon-button"
+          [title]="'decks.cardmarketWants' | t"
+          [attr.aria-label]="'decks.cardmarketWants' | t"
+          [disabled]="entries().length === 0"
+          (click)="openCardmarketWants()"
+        >
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11h10.2L20 8H6.2M9 20h.01M17 20h.01" /></svg>
+        </button>
         <button
           type="button"
           class="icon-button"

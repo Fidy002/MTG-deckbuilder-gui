@@ -117,6 +117,10 @@
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   }
 
+  &.styles {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
+
 
   &.formats {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -689,6 +693,31 @@
 }
 
 // Search field with the chosen types as tags and a dropdown of matching types below it.
+// Play style on the left, the optional theme beside it; stacked on narrow screens.
+.style-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  align-items: start;
+  gap: var(--space-6);
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.style-column,
+.theme-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.theme-column {
+  position: sticky;
+  top: var(--space-4);
+}
+
 .theme-picker {
   position: relative;
 }
@@ -1171,4 +1200,96 @@ textarea {
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+.budget-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.budget-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.euro-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 600;
+
+  input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.budget-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.budget-chip {
+  height: auto;
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+
+  &.active {
+    border-color: var(--color-accent-strong);
+    background: var(--color-accent-strong);
+    color: var(--color-surface);
+  }
+}
+
+.deck-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  text-align: right;
+}
+
+.deck-cost {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  white-space: nowrap;
+
+  strong {
+    font-size: var(--text-lg);
+    color: var(--color-text);
+  }
+
+  &.over strong {
+    color: var(--color-danger);
+  }
+}
+
+.card-price {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.chosen-price {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.pick.over-budget {
+  opacity: 0.45;
+
+  .card-price {
+    color: var(--color-danger);
+  }
 }

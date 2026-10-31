@@ -191,6 +191,19 @@ aside {
   }
 }
 
+.deck-price {
+  flex: none;
+  margin-left: var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+
+  .missing {
+    color: var(--color-highlight);
+  }
+}
+
 .deck-card-count.sideboard {
   margin-left: calc(-1 * var(--space-2));
   color: var(--color-sideboard);

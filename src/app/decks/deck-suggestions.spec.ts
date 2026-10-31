@@ -7,6 +7,16 @@ import { DeckSuggestions, roleStaples, MANA_ENCHANTMENT_QUERY, MANA_ROCK_QUERY, 
 const card = (name: string, oracle_text = '', game_changer = false) => ({ name, oracle_text, game_changer }) as unknown as ScryfallCard;
 
 describe('deck suggestions', () => {
+  it('only suggests commanders of the chosen theme types', async () => {
+    const findPopularCards = vi.fn((_query: string) => of([] as ScryfallCard[]));
+    TestBed.configureTestingModule({ providers: [{ provide: ScryfallService, useValue: { findPopularCards } }] });
+    const service = TestBed.inject(DeckSuggestions);
+    await firstValueFrom(service.commanders({ colors: ['R'], creatureTypes: ['Dragon', 'Goblin'], themeTypes: ['Dragon'], typal: true }));
+    const queries = findPopularCards.mock.calls.map(([query]) => query);
+    expect(queries.length).toBeGreaterThan(0);
+    expect(queries.every((query) => query.includes('(t:"dragon")'))).toBe(true);
+  });
+
   it('suggests the mana first, mana enchantments and rocks cheapest first', async () => {
     expect(roleCounts({ format: 'commander', colors: ['G'], exclude: [] })[0].role).toBe('ramp');
     const cheap = [{ name: 'Big', cmc: 4 }, { name: 'One', cmc: 1 }, { name: 'Two', cmc: 2 }, { name: 'Other One', cmc: 1 }] as ScryfallCard[];
@@ -36,6 +46,13 @@ describe('deck suggestions', () => {
     expect(roleQuery({ role: 'creatures', query: 't:creature', count: 5 }, { format: 'kitchentable', colors: [], exclude: [] })).toBe(
       't:creature c<=c',
     );
+  });
+
+  it('limits commanders and suggestions to the price per card, cheapest printing first', () => {
+    expect(commanderQuery(['U'], undefined, 5)).toBe('is:commander legal:commander id>=u eur<=5 prefer:eur-low');
+    expect(
+      roleQuery({ role: 'ramp', query: 'otag:ramp', count: 10 }, { format: 'commander', colors: ['G'], exclude: [], maxCardPrice: 2.5 }),
+    ).toBe('otag:ramp id<=g legal:commander eur<=2.5 prefer:eur-low');
   });
 
   it('skips owned and duplicate cards and respects the bracket', () => {

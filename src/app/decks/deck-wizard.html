@@ -43,9 +43,53 @@
       </div>
     }
 
-    @case ('level') {
-      @if (format() === 'commander') {
-        <h3>{{ 'wizard.bracketQuestion' | t }}</h3>
+    @case ('budget') {
+      <h3>{{ 'wizard.planningQuestion' | t }}</h3>
+      <p class="lead">{{ 'wizard.planningHint' | t }}</p>
+      <div class="choices two">
+        <button type="button" class="choice" [class.active]="planning() === 'budget'" (click)="planning.set('budget')">
+          <strong>{{ 'wizard.planningBudget' | t }}</strong>
+          <span>{{ 'wizard.planningBudgetHint' | t }}</span>
+        </button>
+        <button type="button" class="choice" [class.active]="planning() === 'bracket'" (click)="planning.set('bracket')">
+          <strong>{{ 'wizard.planningBracket' | t }}</strong>
+          <span>{{ 'wizard.planningBracketHint' | t }}</span>
+        </button>
+      </div>
+      @if (planning() === 'budget') {
+        <div class="budget-fields">
+          <label class="budget-field">
+            <span class="caps-label">{{ 'wizard.deckBudget' | t }}</span>
+            <span class="euro-input">
+              <input type="number" min="1" step="1" inputmode="decimal" [value]="deckBudget() ?? ''" [placeholder]="'wizard.noLimit' | t" (input)="setBudget('deck', $event)" />
+              <span aria-hidden="true">€</span>
+            </span>
+            <span class="budget-chips">
+              @for (value of deckBudgetPresets; track value) {
+                <button type="button" class="budget-chip" [class.active]="deckBudget() === value" [attr.aria-pressed]="deckBudget() === value" (click)="pickBudget('deck', value)">
+                  {{ value }} €
+                </button>
+              }
+            </span>
+            <small class="muted">{{ 'wizard.deckBudgetHint' | t }}</small>
+          </label>
+          <label class="budget-field">
+            <span class="caps-label">{{ 'wizard.cardBudget' | t }}</span>
+            <span class="euro-input">
+              <input type="number" min="0.1" step="0.5" inputmode="decimal" [value]="cardBudget() ?? ''" [placeholder]="'wizard.noLimit' | t" (input)="setBudget('card', $event)" />
+              <span aria-hidden="true">€</span>
+            </span>
+            <span class="budget-chips">
+              @for (value of cardBudgetPresets; track value) {
+                <button type="button" class="budget-chip" [class.active]="cardBudget() === value" [attr.aria-pressed]="cardBudget() === value" (click)="pickBudget('card', value)">
+                  {{ value }} €
+                </button>
+              }
+            </span>
+            <small class="muted">{{ 'wizard.cardBudgetHint' | t }}</small>
+          </label>
+        </div>
+      } @else {
         <p class="lead">
           {{ 'bracket.infoBefore' | t }}
           <button type="button" class="link" (click)="openGameChangers()">{{ 'bracket.gameChangersLink' | t }}</button>{{ 'bracket.infoAfter' | t }}
@@ -151,16 +195,22 @@
             }
           }
         </div>
-      } @else {
-        <h3>{{ 'wizard.legalityQuestion' | t }}</h3>
-        <div class="choices formats">
-          @for (option of constructedFormats; track option.id) {
-            <button type="button" class="choice" [class.active]="legalityFormat() === option.id" (click)="legalityFormat.set(option.id)">
-              <strong>{{ option.label }}</strong>
-            </button>
-          }
-        </div>
       }
+      <div class="nav">
+        <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
+        <button type="button" class="primary" [disabled]="busy()" (click)="submitLevel()">{{ 'wizard.next' | t }}</button>
+      </div>
+    }
+
+    @case ('level') {
+      <h3>{{ 'wizard.legalityQuestion' | t }}</h3>
+      <div class="choices formats">
+        @for (option of constructedFormats; track option.id) {
+          <button type="button" class="choice" [class.active]="legalityFormat() === option.id" (click)="legalityFormat.set(option.id)">
+            <strong>{{ option.label }}</strong>
+          </button>
+        }
+      </div>
       <div class="nav">
         <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
         <button type="button" class="primary" [disabled]="busy()" (click)="submitLevel()">{{ 'wizard.next' | t }}</button>
@@ -229,69 +279,75 @@
     }
 
     @case ('style') {
-      <h3>{{ 'wizard.styleQuestion' | t }}</h3>
-      @if (styleAdvice(); as advice) {
-        <p class="lead">
-          {{ 'wizard.styleAdvice' | t: { style: (styleLabel($any(advice.style)) | t), count: advice.count, total: advice.total } }}
-        </p>
-      }
-      <div class="choices three">
-        @for (option of playStyles; track option) {
-          <button type="button" class="choice" [class.active]="style() === option" (click)="pickStyle(option)">
-            @if (styleAdvice()?.style === option) {
-              <span class="recommended caps-label">{{ 'wizard.recommended' | t }}</span>
-            }
-            <strong>{{ styleLabel(option) | t }}</strong>
-            <span>{{ styleHint(option) | t }}</span>
-            <app-mana-curve class="style-curve" [target]="styleCurve(option)" [mini]="true" [scaleMax]="styleCurveMax" />
-          </button>
-        }
-      </div>
-      <h3>{{ 'wizard.themeQuestion' | t }}</h3>
-      <p class="lead">{{ 'wizard.themeHint' | t }}</p>
-      <div class="theme-picker">
-        <div class="theme-field" (click)="themeInput.focus()">
-          @for (type of themes(); track type) {
-            <span class="theme-tag">
-              {{ typeName(type) }}
-              <button type="button" class="theme-tag-remove" [attr.aria-label]="('wizard.removeTheme' | t) + ' ' + typeName(type)" (click)="toggleTheme(type)">
-                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-              </button>
-            </span>
+      <div class="style-layout">
+        <div class="style-column">
+          <h3>{{ 'wizard.styleQuestion' | t }}</h3>
+          @if (styleAdvice(); as advice) {
+            <p class="lead">
+              {{ 'wizard.styleAdvice' | t: { style: (styleLabel($any(advice.style)) | t), count: advice.count, total: advice.total } }}
+            </p>
           }
-          <input
-            #themeInput
-            type="text"
-            role="combobox"
-            autocomplete="off"
-            aria-autocomplete="list"
-            aria-controls="theme-options"
-            [attr.aria-expanded]="themeOpen() && !!themeMatches().length"
-            [placeholder]="themes().length ? '' : ('wizard.themePlaceholder' | t)"
-            (input)="onThemeInput($event)"
-            (keydown)="onThemeKey($event, themeInput)"
-            (focus)="themeOpen.set(true)"
-            (blur)="themeOpen.set(false)"
-          />
-        </div>
-        @if (themeOpen() && themeMatches().length) {
-          <ul class="theme-options" id="theme-options" role="listbox">
-            @for (type of themeMatches(); track type; let i = $index) {
-              <li
-                role="option"
-                [class.active]="i === themeActive()"
-                [attr.aria-selected]="i === themeActive()"
-                (mousedown)="$event.preventDefault(); pickTheme(type, themeInput)"
-                (mouseenter)="themeActive.set(i)"
-              >
-                {{ typeName(type) }}
-                @if (typeName(type) !== type) {
-                  <span class="muted">{{ type }}</span>
+          <div class="choices styles">
+            @for (option of playStyles; track option) {
+              <button type="button" class="choice" [class.active]="style() === option" (click)="pickStyle(option)">
+                @if (styleAdvice()?.style === option) {
+                  <span class="recommended caps-label">{{ 'wizard.recommended' | t }}</span>
                 }
-              </li>
+                <strong>{{ styleLabel(option) | t }}</strong>
+                <span>{{ styleHint(option) | t }}</span>
+                <app-mana-curve class="style-curve" [target]="styleCurve(option)" [mini]="true" [scaleMax]="styleCurveMax" />
+              </button>
             }
-          </ul>
-        }
+          </div>
+        </div>
+        <div class="theme-column">
+          <h3>{{ 'wizard.themeQuestion' | t }}</h3>
+          <p class="lead">{{ 'wizard.themeHint' | t }}</p>
+          <div class="theme-picker">
+            <div class="theme-field" (click)="themeInput.focus()">
+              @for (type of themes(); track type) {
+                <span class="theme-tag">
+                  {{ typeName(type) }}
+                  <button type="button" class="theme-tag-remove" [attr.aria-label]="('wizard.removeTheme' | t) + ' ' + typeName(type)" (click)="toggleTheme(type)">
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                  </button>
+                </span>
+              }
+              <input
+                #themeInput
+                type="text"
+                role="combobox"
+                autocomplete="off"
+                aria-autocomplete="list"
+                aria-controls="theme-options"
+                [attr.aria-expanded]="themeOpen() && !!themeMatches().length"
+                [placeholder]="themes().length ? '' : ('wizard.themePlaceholder' | t)"
+                (input)="onThemeInput($event)"
+                (keydown)="onThemeKey($event, themeInput)"
+                (focus)="themeOpen.set(true)"
+                (blur)="themeOpen.set(false)"
+              />
+            </div>
+            @if (themeOpen() && themeMatches().length) {
+              <ul class="theme-options" id="theme-options" role="listbox">
+                @for (type of themeMatches(); track type; let i = $index) {
+                  <li
+                    role="option"
+                    [class.active]="i === themeActive()"
+                    [attr.aria-selected]="i === themeActive()"
+                    (mousedown)="$event.preventDefault(); pickTheme(type, themeInput)"
+                    (mouseenter)="themeActive.set(i)"
+                  >
+                    {{ typeName(type) }}
+                    @if (typeName(type) !== type) {
+                      <span class="muted">{{ type }}</span>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        </div>
       </div>
       <div class="nav">
         <button type="button" (click)="back()">{{ 'wizard.back' | t }}</button>
@@ -408,6 +464,7 @@
             <h4 class="chosen-name">{{ name(selected) }}</h4>
             <span class="chosen-meta">
               <ng-container *ngTemplateOutlet="symbols; context: { $implicit: identityOf(selected) }" />
+              <span class="chosen-price" [title]="'card.price' | t">{{ priceLabel(selected) }}</span>
               @if (commanderOwned()) {
                 <span class="muted">{{ 'wizard.fromYourCards' | t }}</span>
               }
@@ -466,7 +523,13 @@
     @case ('suggestions') {
       <div class="step-head">
         <h3>{{ 'wizard.suggestionsTitle' | t }}</h3>
-        <span class="caps-label">{{ 'wizard.deckTotal' | t: { count: deckTotal(), size: deckSize() } }}</span>
+        <span class="deck-stats">
+          <span class="deck-cost" [class.over]="budgetStatus()?.over" role="status" [title]="'wizard.deckCostHint' | t">
+            <span class="caps-label">{{ 'wizard.deckCost' | t }}</span>
+            <strong>{{ euro(spent()) }}</strong>
+          </span>
+          <span class="caps-label">{{ 'wizard.deckTotal' | t: { count: deckTotal(), size: deckSize() } }}</span>
+        </span>
       </div>
       <div class="overview-row">
         @if (brief(); as brief) {
@@ -685,6 +748,7 @@
     class="pick"
     [class.commander-pick]="pick"
     [class.active]="active"
+    [class.over-budget]="!pick && exceedsBudget(card)"
     [attr.aria-pressed]="pick ? active : null"
     [attr.aria-label]="name(card)"
     [attr.data-name]="pick ? null : card.name"
@@ -701,5 +765,6 @@
         <app-card-badges [badges]="badges" />
       }
     </app-card-hover>
+    <span class="card-price" [title]="!pick && exceedsBudget(card) ? ('wizard.overBudgetCard' | t) : ''">{{ priceLabel(card) }}</span>
   </button>
 </ng-template>

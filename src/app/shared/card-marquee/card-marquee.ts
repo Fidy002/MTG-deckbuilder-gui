@@ -1,4 +1,5 @@
 import { Component, DestroyRef, ElementRef, Injectable, Injector, afterNextRender, computed, effect, inject, signal, untracked } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ScryfallCard } from '../../scryfall/scryfall.models';
 import { ScryfallService } from '../../scryfall/scryfall.service';
@@ -34,22 +35,29 @@ async function syncDrift(host: HTMLElement): Promise<void> {
   others.forEach((animation) => (animation.startTime = reference.startTime));
 }
 
-/** The art of popular commanders drifting slowly from right to left behind the top of the page, faded and desaturated. */
+/** The art of popular commanders drifting slowly from right to left behind the top of the page, faded and losing their colour downwards. */
 @Component({
   selector: 'app-card-marquee',
+  imports: [NgTemplateOutlet],
   template: `
+    <!-- The same tracks twice: in colour at the top, fading into a muted copy towards the bottom. -->
+    <div class="art vivid"><ng-container *ngTemplateOutlet="tracks" /></div>
+    <div class="art muted"><ng-container *ngTemplateOutlet="tracks" /></div>
+
     <!-- While pictures change, the old track fades out over the new one, both at the same point of the drift. -->
-    @for (layer of layers(); track layer.id) {
-      <div class="track" [class.leaving]="layer.leaving">
-        <!-- The pictures twice in a row: when the track has moved by half, it looks exactly like at the start. -->
-        @for (src of shown(layer.images); track $index) {
-          <img [src]="src" alt="" width="626" height="457" decoding="async" [class.loaded]="loaded().has(layer.id + '|' + src)" (load)="markLoaded(layer.id + '|' + src)" (error)="markFailed(src)" />
-        }
-        @for (src of shown(layer.images); track $index) {
-          <img [src]="src" alt="" width="626" height="457" decoding="async" [class.loaded]="loaded().has(layer.id + '|' + src)" (load)="markLoaded(layer.id + '|' + src)" (error)="markFailed(src)" />
-        }
-      </div>
-    }
+    <ng-template #tracks>
+      @for (layer of layers(); track layer.id) {
+        <div class="track" [class.leaving]="layer.leaving">
+          <!-- The pictures twice in a row: when the track has moved by half, it looks exactly like at the start. -->
+          @for (src of shown(layer.images); track $index) {
+            <img [src]="src" alt="" width="626" height="457" decoding="async" [class.loaded]="loaded().has(layer.id + '|' + src)" (load)="markLoaded(layer.id + '|' + src)" (error)="markFailed(src)" />
+          }
+          @for (src of shown(layer.images); track $index) {
+            <img [src]="src" alt="" width="626" height="457" decoding="async" [class.loaded]="loaded().has(layer.id + '|' + src)" (load)="markLoaded(layer.id + '|' + src)" (error)="markFailed(src)" />
+          }
+        </div>
+      }
+    </ng-template>
   `,
   styles: `
     :host {
@@ -65,6 +73,26 @@ async function syncDrift(host: HTMLElement): Promise<void> {
         linear-gradient(to bottom, black 35%, transparent),
         linear-gradient(to right, transparent, black 15%, black 85%, transparent);
       mask-composite: intersect;
+    }
+
+    /* Saturated at the top, losing colour towards the bottom. Each picture is filtered once; the gradients are masks
+       the compositor applies, so the drift doesn't filter anything again. */
+    .art {
+      position: absolute;
+      inset: 0;
+      opacity: 0.3;
+    }
+
+    .vivid {
+      mask-image: linear-gradient(to bottom, black 15%, transparent 80%);
+    }
+
+    .muted {
+      mask-image: linear-gradient(to bottom, transparent 15%, black 80%);
+
+      img {
+        filter: saturate(0.15) brightness(0.55);
+      }
     }
 
     .track {
@@ -87,12 +115,12 @@ async function syncDrift(host: HTMLElement): Promise<void> {
       margin-right: calc(-1 * var(--slant) - var(--overlap));
       object-fit: cover;
       mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 356 260' preserveAspectRatio='none'><filter id='f' x='-0.2' y='-0.2' width='1.4' height='1.4'><feGaussianBlur stdDeviation='10'/></filter><polygon filter='url(%23f)' fill='white' points='-8,-40 364,-40 298,300 58,300'/></svg>") 0 0 / 100% 100% no-repeat;
-      filter: saturate(0.15) brightness(0.55);
+      filter: brightness(0.55);
       opacity: 0;
       transition: opacity 2.5s ease-in-out;
 
       &.loaded {
-        opacity: 0.3;
+        opacity: 1;
       }
     }
 

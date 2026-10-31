@@ -1,10 +1,11 @@
 import { Component, computed, inject, input, linkedSignal, output } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { map, switchMap } from 'rxjs';
+import { catchError, map, of, switchMap } from 'rxjs';
 import { Deck, DeckService } from '../decks/deck.service';
 import { I18nService, TranslationKey } from '../i18n/i18n.service';
 import { TranslatePipe } from '../i18n/translate.pipe';
 import { SettingsService } from '../settings/settings.service';
+import { CardPricesService, cardmarketProductUrl, cardmarketSearchUrl, printKey } from '../scryfall/card-prices.service';
 import { cardLanguageName } from '../scryfall/card-languages';
 import {
   ScryfallCard,
@@ -28,6 +29,7 @@ export class CardPreview {
   private readonly settings = inject(SettingsService);
   private readonly i18n = inject(I18nService);
   private readonly deckService = inject(DeckService);
+  private readonly priceService = inject(CardPricesService);
 
   readonly card = input.required<ScryfallCard>();
   readonly language = input<string>();
@@ -64,6 +66,31 @@ export class CardPreview {
     return state?.missing ? cardLanguageName(state.language, this.i18n.language()) : undefined;
   });
 
+  protected readonly price = toSignal(
+    toObservable(this.shown).pipe(
+      switchMap((card) =>
+        this.priceService.prices([card]).pipe(
+          map((prices) => ({ card, price: prices.get(printKey(card)) })),
+          catchError(() => of({ card, price: undefined })),
+        ),
+      ),
+    ),
+  );
+
+  // undefined while the price of the shown printing is loading.
+  protected readonly priceInfo = computed(() => {
+    const state = this.price();
+    if (state?.card !== this.shown()) {
+      return undefined;
+    }
+    const format = (value?: number) => (value === undefined ? undefined : formatEuro(value, this.i18n.language()));
+    return {
+      eur: format(state.price?.eur),
+      eurFoil: format(state.price?.eurFoil),
+      url: state.price?.cardmarketUrl ? cardmarketProductUrl(state.price.cardmarketUrl) : cardmarketSearchUrl(this.card().name),
+    };
+  });
+
   protected readonly decks = this.deckService.decks;
 
   protected readonly targetDeckId = linkedSignal<Deck[], string | undefined>({
@@ -98,4 +125,8 @@ export class CardPreview {
   protected selectValue(event: Event): string {
     return (event.target as HTMLSelectElement).value;
   }
+}
+
+export function formatEuro(value: number, language: string): string {
+  return new Intl.NumberFormat(language, { style: 'currency', currency: 'EUR' }).format(value);
 }

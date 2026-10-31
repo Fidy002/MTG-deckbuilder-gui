@@ -80,21 +80,59 @@
     color: var(--color-text);
   }
 
-  dl {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: baseline;
-    gap: var(--space-2) var(--space-4);
-    margin: 0;
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
     font-size: var(--text-sm);
+
+    p {
+      margin: 0;
+    }
   }
 
-  dd {
-    margin: 0;
+  .type-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-3);
+    font-weight: 600;
+  }
+
+  .mana {
+    flex-shrink: 0;
+  }
+
+  .printing {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    color: var(--color-text-muted);
   }
 
   .text {
     white-space: pre-line;
+  }
+
+  .price {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+
+    .external {
+      margin-left: auto;
+    }
+  }
+
+  .price-value {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .price-foil,
+  .muted {
+    color: var(--color-text-muted);
   }
 }
 

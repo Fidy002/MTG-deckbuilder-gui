@@ -69,6 +69,8 @@ export interface SuggestionOptions {
   preferredSets?: readonly string[];
   // Scryfall searches for the finishers of the deck's plan, main plan first (see deck-wincons).
   planQueries?: readonly string[];
+  // Budget planning: the most a single card may cost (Cardmarket trend, euros).
+  maxCardPrice?: number;
 }
 
 export interface RoleQuery {
@@ -480,10 +482,15 @@ function legalityFilter(format: string): string {
   return format === 'kitchentable' ? '' : `legal:${format}`;
 }
 
-export function commanderQuery(colors: readonly string[], bracket?: Bracket): string {
-  return ['is:commander', 'legal:commander', colors.length ? `id>=${colors.join('').toLowerCase()}` : '', bracketFilter(bracket)]
+export function commanderQuery(colors: readonly string[], bracket?: Bracket, maxCardPrice?: number): string {
+  return ['is:commander', 'legal:commander', colors.length ? `id>=${colors.join('').toLowerCase()}` : '', bracketFilter(bracket), priceFilter(maxCardPrice)]
     .filter(Boolean)
     .join(' ');
+}
+
+// Cards without a known price are left out too; the cheapest printing is shown, as that is what the limit was met with.
+export function priceFilter(maxCardPrice: number | undefined): string {
+  return maxCardPrice === undefined ? '' : `eur<=${maxCardPrice} prefer:eur-low`;
 }
 
 function bracketFilter(bracket: Bracket | undefined): string {
@@ -491,7 +498,13 @@ function bracketFilter(bracket: Bracket | undefined): string {
 }
 
 export function roleQuery(role: RoleQuery, options: SuggestionOptions): string {
-  return [role.query, colorFilter(options.format, options.colors), legalityFilter(options.format), bracketFilter(options.bracket)]
+  return [
+    role.query,
+    colorFilter(options.format, options.colors),
+    legalityFilter(options.format),
+    bracketFilter(options.bracket),
+    priceFilter(options.maxCardPrice),
+  ]
     .filter(Boolean)
     .join(' ');
 }
@@ -547,6 +560,8 @@ export interface CommanderFit {
   // false when the user chose no theme: then only a lord of the types counts for them, not a commander that merely
   // is of a type or names it.
   typal?: boolean;
+  // The creature types the user chose as the theme: then only commanders of these types are suggested.
+  themeTypes?: readonly string[];
 }
 
 export function commanderFit(card: ScryfallCard, fit: CommanderFit, now = new Date()): number {
@@ -621,6 +636,11 @@ export function bestCommander(
   return choices
     .map((r, rank) => ({ card: r.card, key: random() ** (Math.sqrt(rank + 1) * (top / appeal[rank])) }))
     .sort((a, b) => b.key - a.key)[0].card;
+}
+
+/** Cards of one of the creature types, not those that only name them. */
+export function ofTypes(types: readonly string[]): string {
+  return `(${types.map((type) => `t:"${type.toLowerCase()}"`).join(' or ')})`;
 }
 
 export function typeQuery(types: readonly string[]): string {
@@ -758,8 +778,9 @@ export class DeckSuggestions {
     );
   }
 
-  commanders(fit: CommanderFit, bracket?: Bracket): Observable<ScryfallCard[]> {
-    const base = commanderQuery(fit.colors, bracket);
+  commanders(fit: CommanderFit, bracket?: Bracket, maxCardPrice?: number): Observable<ScryfallCard[]> {
+    const themes = fit.themeTypes ?? [];
+    const base = [commanderQuery(fit.colors, bracket, maxCardPrice), themes.length ? ofTypes(themes) : ''].filter(Boolean).join(' ');
     const types = fit.creatureTypes ?? [];
     const sets = fit.preferredSets ?? [];
     const queries = [

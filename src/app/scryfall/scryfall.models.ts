@@ -53,6 +53,9 @@ export interface ScryfallCard {
   image_uris?: ScryfallImageUris;
   card_faces?: ScryfallCardFace[];
   scryfall_uri: string;
+  // Cardmarket trend prices in euros (strings, null when unknown); only English printings carry them.
+  prices?: { eur?: string | null; eur_foil?: string | null };
+  purchase_uris?: { cardmarket?: string };
 }
 
 export interface ScryfallSet {

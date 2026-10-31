@@ -2,9 +2,10 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, ElementRef, computed, effect, inject, input, linkedSignal, output, signal, viewChild } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, debounce, map, of, startWith, switchMap, timer } from 'rxjs';
-import { CardPreview } from '../cards/card-preview';
+import { CardPreview, formatEuro } from '../cards/card-preview';
 import { I18nService } from '../i18n/i18n.service';
 import { TranslatePipe } from '../i18n/translate.pipe';
+import { CardPrice, CardPricesService, entryPrice, printKey } from '../scryfall/card-prices.service';
 import { cardLanguageName } from '../scryfall/card-languages';
 import { COLOR_ORDER, ScryfallCard, cardDisplayName, cardFaces, manaSymbolUrl } from '../scryfall/scryfall.models';
 import { DeckSort } from '../settings/settings.service';
@@ -163,6 +164,23 @@ export class DeckOverview {
   });
 
   private readonly resolved = computed(() => this.lastResult().cards);
+
+  // Prices of the printings shown, the same the deck total is summed from.
+  private readonly priceService = inject(CardPricesService);
+  private readonly prices = toSignal(
+    toObservable(computed(() => [...this.resolved().values()].flatMap((r) => (r ? [r.card] : [])))).pipe(
+      switchMap((cards) =>
+        cards.length ? this.priceService.prices(cards).pipe(catchError(() => of(new Map<string, CardPrice>()))) : of(new Map<string, CardPrice>()),
+      ),
+    ),
+    { initialValue: new Map<string, CardPrice>() },
+  );
+
+  // What one copy costs.
+  protected priceLabel(card: OverviewCard): string | undefined {
+    const price = card.resolved ? entryPrice(this.prices().get(printKey(card.resolved.card)), card.entry.foil) : undefined;
+    return price === undefined ? undefined : formatEuro(price, this.i18n.language());
+  }
 
   protected readonly pending = computed(() => {
     if (this.state().status === 'error') {

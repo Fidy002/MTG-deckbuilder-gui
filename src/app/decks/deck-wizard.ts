@@ -47,11 +47,16 @@ import { WinPlan, WinconId, cardWincons, planFinishers, recommendPlan, winconQue
 import { Deck, DeckService } from './deck.service';
 import { DeckEntry, DeckFormat, parseDecklist, serializeDecklist, detectFormat } from './decklist';
 import { ScryfallService } from '../scryfall/scryfall.service';
+import { CardPrice, CardPricesService, entryPrice, parsePrice, printKey } from '../scryfall/card-prices.service';
+import { formatEuro } from '../cards/card-preview';
 import { germanTypeName } from '../scryfall/type-translations';
 
-type Step = 'format' | 'level' | 'cards' | 'style' | 'colors' | 'commander' | 'suggestions';
+type Step = 'format' | 'budget' | 'level' | 'cards' | 'style' | 'colors' | 'commander' | 'suggestions';
 
-const COMMANDER_STEPS: readonly Step[] = ['format', 'cards', 'style', 'level', 'commander', 'suggestions'];
+// The budget step also holds the bracket, the other way to plan a commander deck.
+const COMMANDER_STEPS: readonly Step[] = ['format', 'cards', 'style', 'budget', 'commander', 'suggestions'];
+// Names per search for all printings of cards; each name brings a few dozen printings at most.
+const PRINT_NAMES_PER_QUERY = 15;
 const CONSTRUCTED_STEPS: readonly Step[] = ['format', 'cards', 'style', 'level', 'colors', 'suggestions'];
 
 // Play styles that usually need Game Changers or tutors, which the lower brackets leave out.
@@ -108,6 +113,7 @@ export class DeckWizard {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly hoverOverlay = inject(CardHoverOverlay);
+  private readonly priceService = inject(CardPricesService);
 
   // Building on an existing deck (/decks/:id/wizard): its cards are the own cards, and the result updates that deck.
   protected readonly editing = signal<Deck | undefined>(undefined);
@@ -127,6 +133,7 @@ export class DeckWizard {
     this.format.set(deck.format ?? detectFormat(parseDecklist(deck.text)));
     if (deck.bracket) {
       this.bracket.set(deck.bracket);
+      this.planning.set('bracket');
     }
     if (deck.legalityFormat) {
       this.legalityFormat.set(deck.legalityFormat);
@@ -143,6 +150,11 @@ export class DeckWizard {
 
   protected readonly format = signal<DeckFormat>('commander');
   protected readonly bracket = signal<Bracket>(RECOMMENDED_BRACKET);
+  // A commander deck is planned either by budget or by bracket.
+  protected readonly planning = signal<'budget' | 'bracket'>('budget');
+  // Budget limits in euros (Cardmarket trend); undefined is no limit.
+  protected readonly deckBudget = signal<number | undefined>(100);
+  protected readonly cardBudget = signal<number | undefined>(5);
   protected readonly recommendedBracket = RECOMMENDED_BRACKET;
   protected readonly levels = BRACKETS.map((b) => b.value);
   protected readonly legalityFormat = signal(CONSTRUCTED_FORMATS[0].id);
@@ -574,7 +586,19 @@ export class DeckWizard {
   }
 
   protected takeAll(): void {
-    const cards = this.groupCards();
+    // Within a budget, only as many as it still allows, in the order shown.
+    let remaining = this.budgetStatus()?.remaining ?? Infinity;
+    const cards = this.groupCards().filter((card) => {
+      if (this.exceedsBudget(card)) {
+        return false;
+      }
+      const cost = (this.cardPrice(card) ?? 0) * (this.currentGroup() ? this.copiesFor(this.currentGroup()!) : 1);
+      if (cost > remaining) {
+        return false;
+      }
+      remaining -= cost;
+      return true;
+    });
     this.hoverOverlay.hide();
     for (const card of cards) {
       this.hoverOverlay.spawnEmbers(this.suggestionTile(card.name)?.getBoundingClientRect() ?? new DOMRect());
@@ -645,7 +669,7 @@ export class DeckWizard {
       group && !all
         ? []
         : Object.entries(this.shownBasics()).flatMap(([color, count]): DeckEntry[] => (count > 0 ? [{ count, name: basicLandName(color), section: 'main' }] : []));
-    const head: DeckEntry[] = all && commander ? [{ count: 1, name: deckCardName(commander), section: 'commander' }] : [];
+    const head: DeckEntry[] = all && commander ? [{ count: 1, ...this.printing(commander), section: 'commander' }] : [];
     return [...head, ...owned, ...taken, ...basics];
   });
 
@@ -908,7 +932,10 @@ export class DeckWizard {
   }
 
   protected stepLabel(step: Step): TranslationKey {
-    return step === 'level' ? (this.format() === 'commander' ? 'wizard.stepBracket' : 'wizard.stepFormatLegality') : `wizard.step.${step}`;
+    if (step === 'level') {
+      return 'wizard.stepFormatLegality';
+    }
+    return step === 'budget' && this.planning() === 'bracket' ? 'wizard.stepBracket' : `wizard.step.${step}`;
   }
 
   protected roleLabel(role: SuggestionRole): TranslationKey {
@@ -1101,7 +1128,7 @@ export class DeckWizard {
   }
 
   protected submitStyle(): void {
-    this.step.set('level');
+    this.step.set(this.format() === 'commander' ? 'budget' : 'level');
   }
 
   // The play style the own cards point to; preselected until the user picks one.
@@ -1113,8 +1140,90 @@ export class DeckWizard {
     this.stylePicked.set(true);
   }
 
-  // Brackets only apply to commander decks.
-  private readonly power = computed(() => (this.format() === 'commander' ? this.bracket() : 0));
+  // Brackets only apply to commander decks planned by bracket.
+  private readonly activeBracket = computed(() => (this.format() === 'commander' && this.planning() === 'bracket' ? this.bracket() : undefined));
+  private readonly power = computed(() => this.activeBracket() ?? 0);
+  private readonly maxCardPrice = computed(() => (this.format() === 'commander' && this.planning() === 'budget' ? this.cardBudget() : undefined));
+
+  // Prices of the commander candidates and suggestions, shown below each card.
+  private readonly prices = toSignal(
+    toObservable(
+      computed(() => {
+        const commander = this.commander();
+        return [
+          ...(commander ? [commander] : []),
+          ...this.ownedCommanders(),
+          ...this.commanderOptions(),
+          ...this.groups().flatMap((g) => g.cards),
+          ...this.basicCards().values(),
+        ];
+      }),
+    ).pipe(
+      debounceTime(200),
+      switchMap((cards) => (cards.length ? this.priceService.prices(cards).pipe(catchError(() => of(new Map<string, CardPrice>()))) : of(new Map<string, CardPrice>()))),
+    ),
+    { initialValue: new Map<string, CardPrice>() },
+  );
+
+  // The price of the printing shown, the same the deck view takes later; until it has loaded, the one Scryfall sent with the card.
+  protected cardPrice(card: ScryfallCard): number | undefined {
+    const price = this.prices().get(printKey(card));
+    return price ? entryPrice(price, false) : parsePrice(card.prices?.eur);
+  }
+
+  protected priceLabel(card: ScryfallCard): string {
+    const price = this.cardPrice(card);
+    return price === undefined ? '–' : this.euro(price);
+  }
+
+  protected euro(value: number): string {
+    return formatEuro(value, this.i18n.language());
+  }
+
+  // What the cards still to buy cost: the commander unless it is an own card, the taken suggestions and the basic lands.
+  protected readonly spent = computed(() => {
+    const commander = this.commander();
+    const commanderCost = commander && !this.commanderOwned() ? (this.cardPrice(commander) ?? 0) : 0;
+    const basics = Object.entries(this.shownBasics()).reduce((sum, [color, count]) => {
+      const card = this.basicCards().get(color);
+      return sum + (card ? (this.cardPrice(card) ?? 0) * count : 0);
+    }, 0);
+    return this.groups().reduce(
+      (sum, g) => sum + this.takenIn(g).reduce((groupSum, c) => groupSum + (this.cardPrice(c) ?? 0) * this.copiesFor(g), 0),
+      commanderCost + basics,
+    );
+  });
+
+  protected readonly budgetStatus = computed(() => {
+    const budget = this.planning() === 'budget' && this.format() === 'commander' ? this.deckBudget() : undefined;
+    if (budget === undefined) {
+      return undefined;
+    }
+    const spent = this.spent();
+    return { spent, budget, remaining: budget - spent, over: spent > budget };
+  });
+
+  // A suggestion that would push the deck over its budget, or whose printing in the card language costs more than a card may.
+  protected exceedsBudget(card: ScryfallCard): boolean {
+    const status = this.budgetStatus();
+    const limit = this.maxCardPrice();
+    const price = this.cardPrice(card);
+    return price !== undefined && ((!!status && price > status.remaining) || (limit !== undefined && price > limit));
+  }
+
+  protected readonly deckBudgetPresets = [50, 100, 150, 200, 300];
+  protected readonly cardBudgetPresets = [1, 2, 5, 10, 20, 50];
+
+  // Picking the chosen amount again takes the limit away.
+  protected pickBudget(target: 'deck' | 'card', value: number): void {
+    const budget = target === 'deck' ? this.deckBudget : this.cardBudget;
+    budget.set(budget() === value ? undefined : value);
+  }
+
+  protected setBudget(target: 'deck' | 'card', event: Event): void {
+    const value = parseFloat((event.target as HTMLInputElement).value.replace(',', '.'));
+    (target === 'deck' ? this.deckBudget : this.cardBudget).set(Number.isFinite(value) && value > 0 ? value : undefined);
+  }
 
   // The official Game Changer list, loaded from Scryfall when first opened so it is always current.
   protected readonly showGameChangers = signal(false);
@@ -1156,9 +1265,10 @@ export class DeckWizard {
           preferredSets: this.preferredSets(),
           style: (card) => fitsStyle(card, style),
           typal: this.themes().length > 0,
+          themeTypes: this.themes(),
         });
         this.shownCommanders.clear();
-        this.commanderPool.set(await firstValueFrom(this.suggestionsService.commanders(this.commanderFit(), this.bracket())));
+        this.commanderPool.set(await firstValueFrom(this.suggestionsService.commanders(this.commanderFit(), this.activeBracket(), this.maxCardPrice())));
         if (!this.commanderPicked()) {
           await this.suggestCommander();
         }
@@ -1284,7 +1394,8 @@ export class DeckWizard {
       const options: SuggestionOptions = {
         format: this.format() === 'commander' ? 'commander' : this.legalityFormat(),
         colors: this.colors(),
-        bracket: this.format() === 'commander' ? this.bracket() : undefined,
+        bracket: this.activeBracket(),
+        maxCardPrice: this.maxCardPrice(),
         exclude: [...ownedCards.map((c) => c.name), ...(commander ? [commander.name] : [])],
         style: this.style(),
         commander,
@@ -1325,7 +1436,7 @@ export class DeckWizard {
     const entries: DeckEntry[] = [];
     const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
     if (commander) {
-      entries.push({ count: 1, name: deckCardName(commander), section: 'commander' });
+      entries.push({ count: 1, ...this.printing(commander), section: 'commander' });
     }
     for (const { entry } of this.owned()) {
       if (commander && entry.name.toLowerCase() === deckCardName(commander).toLowerCase()) {
@@ -1353,7 +1464,9 @@ export class DeckWizard {
     this.deckService.setThemes(deck.id, this.themes());
     this.deckService.setStyle(deck.id, this.style());
     if (commanderDeck) {
-      this.deckService.setBracket(deck.id, this.bracket());
+      if (this.planning() === 'bracket') {
+        this.deckService.setBracket(deck.id, this.bracket());
+      }
     } else {
       this.deckService.setLegalityFormat(deck.id, this.legalityFormat());
     }
@@ -1369,7 +1482,7 @@ export class DeckWizard {
     if (commander && !entries.some((e) => e.section === 'commander')) {
       const name = deckCardName(commander);
       const rest = entries.filter((e) => !(e.section === 'main' && same(e.name, name)));
-      entries.splice(0, entries.length, { count: 1, name, section: 'commander' }, ...rest);
+      entries.splice(0, entries.length, { count: 1, ...this.printing(commander), section: 'commander' }, ...rest);
     }
     for (const group of this.groups()) {
       for (const card of this.takenIn(group)) {
@@ -1393,7 +1506,9 @@ export class DeckWizard {
     this.deckService.setThemes(deck.id, this.themes());
     this.deckService.setStyle(deck.id, this.style());
     if (commanderDeck) {
-      this.deckService.setBracket(deck.id, this.bracket());
+      if (this.planning() === 'bracket') {
+        this.deckService.setBracket(deck.id, this.bracket());
+      }
     } else {
       this.deckService.setLegalityFormat(deck.id, this.legalityFormat());
     }
@@ -1418,21 +1533,57 @@ export class DeckWizard {
   }
 
 
+  private readonly budgetPlanning = computed(() => this.format() === 'commander' && this.planning() === 'budget');
+
   // Suggestions are ranked on the English cards; this swaps in the printings in the card language where they exist.
-  // Cards from the own sets keep that printing; for all others any printing (in the card language) will do.
+  // Cards from the own sets keep that printing, and so do all cards within a budget: the deck has to cost what was planned.
+  // For all others any printing (in the card language) will do.
   private printing(card: ScryfallCard): Pick<DeckEntry, 'name' | 'set' | 'collectorNumber'> {
-    return this.preferredSets().includes(card.set)
+    return this.budgetPlanning() || this.preferredSets().includes(card.set)
       ? { name: deckCardName(card), set: card.set, collectorNumber: card.collector_number }
       : { name: deckCardName(card) };
   }
 
   private async localize(cards: readonly ScryfallCard[]): Promise<ScryfallCard[]> {
-    const entries = cards.map((card): DeckEntry => ({ count: 1, ...this.printing(card), section: 'main' }));
-    if (!entries.length) {
+    if (!cards.length) {
       return [];
     }
-    const resolved = await firstValueFrom(this.deckCards.resolve(entries, this.settings.cardLanguage()));
-    return cards.map((card, i) => withImages(resolved.get(cardKey(entries[i]))?.card ?? card, card));
+    const language = this.settings.cardLanguage();
+    // Within a budget, the cheapest printing in the card language; cards that have none keep the cheapest English one.
+    const cheapest =
+      this.budgetPlanning() && language !== 'en'
+        ? await this.cheapestPrints(cards.filter((card) => !this.preferredSets().includes(card.set)), language).catch(() => new Map<string, ScryfallCard>())
+        : new Map<string, ScryfallCard>();
+    const entries = cards.map((card): DeckEntry => ({ count: 1, ...this.printing(cheapest.get(card.name) ?? card), section: 'main' }));
+    const resolved = await firstValueFrom(this.deckCards.resolve(entries, language));
+    // The price is looked up for the printing shown, as the deck view does.
+    return cards.map((card, i) => {
+      const local = resolved.get(cardKey(entries[i]))?.card;
+      return local ? { ...withImages(local, card), prices: local === card ? card.prices : undefined } : card;
+    });
+  }
+
+  // Per card name the cheapest of its printings in the language (Cardmarket trend); one without a known price only when no other has one.
+  private async cheapestPrints(cards: readonly ScryfallCard[], language: string): Promise<Map<string, ScryfallCard>> {
+    const names = [...new Set(cards.map((card) => card.name))];
+    const prints: ScryfallCard[] = [];
+    for (let i = 0; i < names.length; i += PRINT_NAMES_PER_QUERY) {
+      const batch = names.slice(i, i + PRINT_NAMES_PER_QUERY);
+      const query = `(${batch.map((name) => `!"${name.replace(/"/g, '')}"`).join(' or ')}) lang:${language}`;
+      prints.push(...(await firstValueFrom(this.scryfall.findCards(query, 'prints'))));
+    }
+    const prices = prints.length ? await firstValueFrom(this.priceService.prices(prints)) : new Map<string, CardPrice>();
+    const priceOf = (card: ScryfallCard) => entryPrice(prices.get(printKey(card)), false);
+    const best = new Map<string, ScryfallCard>();
+    for (const print of prints) {
+      const current = best.get(print.name);
+      const price = priceOf(print);
+      const currentPrice = current && priceOf(current);
+      if (!current || (price !== undefined && (currentPrice === undefined || price < currentPrice))) {
+        best.set(print.name, print);
+      }
+    }
+    return best;
   }
 
   private async run(task: () => Promise<void>): Promise<void> {
